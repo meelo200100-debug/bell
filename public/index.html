@@ -122,14 +122,14 @@ nav button.on{color:var(--g);background:rgba(46,229,157,.12)}
   </div>
 
    <div class="stats">
-   <div class="t"><svg viewBox="0 0 24 24"><path d="M13 2 4 14h7l-1 8 9-12h-7z"/></svg><small>Hourly</small><b id="hr">29.17</b><span>BELL/h</span></div>
-   <div class="t"><svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="16" rx="3"/><path d="M3 10h18M8 3v4M16 3v4"/></svg><small>Daily</small><b id="dy">700</b><span>BELL/day</span></div>
+   <div class="t"><svg viewBox="0 0 24 24"><path d="M13 2 4 14h7l-1 8 9-12h-7z"/></svg><small>Hourly</small><b id="hr">20.83</b><span>BELL/h</span></div>
+   <div class="t"><svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="16" rx="3"/><path d="M3 10h18M8 3v4M16 3v4"/></svg><small>Daily</small><b id="dy">500</b><span>BELL/day</span></div>
    <div class="t"><svg viewBox="0 0 24 24"><path d="M3 17l6-6 4 4 8-8M15 7h6v6"/></svg><small>Boost</small><b>×<span id="bst2">1.00</span></b><span>multiplier</span></div>
-   <div class="t"><svg viewBox="0 0 24 24"><path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z"/></svg><small>League</small><b id="lvn">Tin</b><span id="lvs">Lv.1</span></div>
+   <div class="t"><svg viewBox="0 0 24 24"><path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z"/></svg><small>League</small><b id="lvn">Free</b><span id="lvs">Lv.0</span></div>
   </div>
 
-  <div class="card lv"><div class="hex" id="hex">1</div>
-   <div><div class="hd2">Next Level: <span id="nxl">2</span><span id="prog"></span></div>
+  <div class="card lv"><div class="hex" id="hex">0</div>
+   <div><div class="hd2">Next Level: <span id="nxl">1</span><span id="prog"></span></div>
    <div class="bar"><i id="lb"></i></div><small id="lt"></small></div></div>
 
   <div class="card" id="loginCard"><div class="mh"><div class="ico"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="17" rx="3"/><path d="M7 2v4M17 2v4M3 9h18M8 14h3M8 17h6"/></svg></div>
@@ -174,16 +174,17 @@ nav button.on{color:var(--g);background:rgba(46,229,157,.12)}
 const tg = window.Telegram && Telegram.WebApp;
 if (tg) { tg.ready(); tg.expand(); try { tg.setHeaderColor('#04100b'); tg.setBackgroundColor('#04100b'); } catch (e) {} }
 const $ = id => document.getElementById(id);
-const DAY = 864e5, JETTON_MASTER = 'EQAWPHubEzmFIM0UWV0yuATzbmj9HdRRn5WXvKLzqflrWGvl', JETTON_MASTER_RAW = '0:163c7b9b13398520cd14595d32b804f36e68fd1dd4519f9597bca2f3a9f96b58', JETTON_DECIMALS = 9, LV = [['Tin',1000],['Copper',2000],['Brass',3000],['Silver',4000],['BELLGRAM',5000]], DAILY_RATES = [700,800,900,1000,1100];
+const DAY = 864e5, JETTON_MASTER = 'EQAWPHubEzmFIM0UWV0yuATzbmj9HdRRn5WXvKLzqflrWGvl', JETTON_MASTER_RAW = '0:163c7b9b13398520cd14595d32b804f36e68fd1dd4519f9597bca2f3a9f96b58', JETTON_DECIMALS = 9, LV = [['Free',0],['Tin',1000],['Copper',2000],['Brass',3000],['Silver',4000],['BELLGRAM',5000]], DAILY_RATES = [500,700,800,900,1000,1100];
 const acc = (s, n) => s.rate * Math.min(n - s.started, DAY) / 36e5;
 const f = (n, d) => n.toLocaleString('en', {minimumFractionDigits: d, maximumFractionDigits: d});
 let S, off = 0, anim = false, tc, jettonRequest = 0;
-const miningRate = walletBalance => Number(walletBalance) < 1000 ? 0 : DAILY_RATES[Math.max(0, Math.min(DAILY_RATES.length - 1, Math.ceil(Number(walletBalance) / 1000) - 1))];
+const levelFor = walletBalance => { const v = Number(walletBalance) || 0; let i = 0; while (i < LV.length - 1 && v >= LV[i + 1][1]) i++; return i; };
+const miningRate = walletBalance => DAILY_RATES[levelFor(walletBalance)];
 const loginAvailable = s => !s.lastLogin || Date.now() - s.lastLogin >= DAY;
 
 function demo(p, b) {
   let d; try { d = JSON.parse(localStorage.bc); } catch (e) {}
-  d = d || {balance: 0, rate: 700 / 24, started: Date.now(), refs: 0, wallet: null, link: 'https://t.me/bellcoinbct_bot/app?startapp=r1', name: 'Guest', loginStreak: 0, lastLogin: 0};
+  d = d || {balance: 0, rate: 500 / 24, started: Date.now(), refs: 0, wallet: null, link: 'https://t.me/bellcoinbct_bot/app?startapp=r1', name: 'Guest', loginStreak: 0, lastLogin: 0};
   d.loginStreak = Number(d.loginStreak) || 0; d.lastLogin = Number(d.lastLogin) || 0;
   if (p === 'claim') { d.balance += acc(d, Date.now()); d.started = Date.now(); }
   if (p === 'wallet') d.wallet = (b && b.address) || null;
@@ -250,10 +251,10 @@ function draw() {
   $('sb').style.width = (left / DAY * 100) + '%';
   if (!anim) showBal(S.balance);
   const levelBalance = Number(S.walletBalance) || 0;
-  let i = Math.max(0, Math.min(LV.length - 1, Math.ceil(levelBalance / 1000) - 1));
-  $('lvn').textContent = LV[i][0]; $('lvs').textContent = 'Lv.' + (i + 1); $('hex').textContent = i + 1; $('lvl').textContent = 'Level ' + (i + 1);
+  const i = levelFor(levelBalance);
+  $('lvn').textContent = LV[i][0]; $('lvs').textContent = 'Lv.' + i; $('hex').textContent = i; $('lvl').textContent = 'Level ' + i;
   const nx = LV[i + 1];
-  $('nxl').textContent = nx ? i + 2 : 'Max';
+  $('nxl').textContent = nx ? i + 1 : 'Max';
   const currentReq = LV[i][1], nextReq = nx ? nx[1] : currentReq;
   const firstLevelProgress = levelBalance < currentReq;
   $('prog').textContent = firstLevelProgress ? `${f(levelBalance, 0)} / ${f(currentReq, 0)} BELLGRAM` : (nx ? `${f(levelBalance, 0)} / ${f(nextReq, 0)} BELLGRAM` : `${f(levelBalance, 0)} BELLGRAM`);
