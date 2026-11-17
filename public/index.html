@@ -121,9 +121,9 @@ nav button.on{color:var(--g);background:rgba(46,229,157,.12)}
    <button class="go" id="claim" disabled>Claim BELL</button>
   </div>
 
-  <div class="stats">
-   <div class="t"><svg viewBox="0 0 24 24"><path d="M13 2 4 14h7l-1 8 9-12h-7z"/></svg><small>Hourly</small><b id="hr">25</b><span>BELL/h</span></div>
-   <div class="t"><svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="16" rx="3"/><path d="M3 10h18M8 3v4M16 3v4"/></svg><small>Daily</small><b id="dy">~600</b><span>BELL/day</span></div>
+   <div class="stats">
+   <div class="t"><svg viewBox="0 0 24 24"><path d="M13 2 4 14h7l-1 8 9-12h-7z"/></svg><small>Hourly</small><b id="hr">29.17</b><span>BELL/h</span></div>
+   <div class="t"><svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="16" rx="3"/><path d="M3 10h18M8 3v4M16 3v4"/></svg><small>Daily</small><b id="dy">700</b><span>BELL/day</span></div>
    <div class="t"><svg viewBox="0 0 24 24"><path d="M3 17l6-6 4 4 8-8M15 7h6v6"/></svg><small>Boost</small><b>×<span id="bst2">1.00</span></b><span>multiplier</span></div>
    <div class="t"><svg viewBox="0 0 24 24"><path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z"/></svg><small>League</small><b id="lvn">Tin</b><span id="lvs">Lv.1</span></div>
   </div>
@@ -131,6 +131,13 @@ nav button.on{color:var(--g);background:rgba(46,229,157,.12)}
   <div class="card lv"><div class="hex" id="hex">1</div>
    <div><div class="hd2">Next Level: <span id="nxl">2</span><span id="prog"></span></div>
    <div class="bar"><i id="lb"></i></div><small id="lt"></small></div></div>
+
+  <div class="card" id="loginCard"><div class="mh"><div class="ico"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="17" rx="3"/><path d="M7 2v4M17 2v4M3 9h18M8 14h3M8 17h6"/></svg></div>
+   <div><b>Daily login</b><br><small id="loginInfo">Claim 10 BELL today</small></div><span class="boost" id="loginStreak">Day 1/7</span></div>
+   <button class="go" id="loginBtn">Claim daily bonus</button><small id="loginMsg" role="status"></small></div>
+
+  <div class="card soon"><div class="ico"><svg viewBox="0 0 24 24"><path d="M9 11l3 3 8-8M20 12v7a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h9"/></svg></div>
+   <div><b>Tasks</b><br><small>Future missions and rewards can be added here.</small></div><em>Coming soon</em></div>
 
   <div class="card soon"><div class="ico"><svg viewBox="0 0 24 24"><path d="M9 11l3 3 8-8M20 12v7a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h9"/></svg></div>
    <div><b>Mission center</b><br><small>Daily tasks and rewards</small></div><em>Soon</em></div>
@@ -148,8 +155,12 @@ nav button.on{color:var(--g);background:rgba(46,229,157,.12)}
   <div class="card"><small>App Balance</small><div class="bn"><span id="bal2">0</span> <em>BELL</em></div></div>
   <div class="card"><h2>TON wallet</h2>
    <small id="wsub">Connect a wallet to link it to your BELLGRAM account.</small>
+   <div class="bn"><span id="tonbal">0.0000</span> <em>TON</em></div>
+   <div class="bn"><span id="wbal">0.0000</span> <em>BELLGRAM</em></div>
    <div id="tcbtn"></div><div class="addr" id="addr"></div><small id="werr" role="status"></small></div>
-  <div class="card"><small>Withdrawals are not open yet. Linking a wallet does not move any BELL. BELL points are for testing and have no monetary value.</small></div>
+  <div class="card"><h2>Withdraw BELLGRAM</h2>
+   <small>Minimum withdrawal: <b>10,000 mined BELL</b>. You must also hold at least <b>3,000 BELLGRAM</b> in the connected wallet.</small>
+   <button class="go" id="withdrawBtn" disabled>Withdraw</button><small id="withdrawMsg" role="status">Withdrawal is not open yet.</small></div>
  </section>
 </main>
 
@@ -163,16 +174,20 @@ nav button.on{color:var(--g);background:rgba(46,229,157,.12)}
 const tg = window.Telegram && Telegram.WebApp;
 if (tg) { tg.ready(); tg.expand(); try { tg.setHeaderColor('#04100b'); tg.setBackgroundColor('#04100b'); } catch (e) {} }
 const $ = id => document.getElementById(id);
-const DAY = 864e5, LV = [['Tin',0],['Copper',100],['Brass',1000],['Silver',5000],['Gold',25000]];
+const DAY = 864e5, JETTON_MASTER = 'EQAWPHubEzmFIM0UWV0yuATzbmj9HdRRn5WXvKLzqflrWGvl', JETTON_MASTER_RAW = '0:163c7b9b13398520cd14595d32b804f36e68fd1dd4519f9597bca2f3a9f96b58', JETTON_DECIMALS = 9, LV = [['Tin',1000],['Copper',2000],['Brass',3000],['Silver',4000],['BELLGRAM',5000]], DAILY_RATES = [700,800,900,1000,1100];
 const acc = (s, n) => s.rate * Math.min(n - s.started, DAY) / 36e5;
 const f = (n, d) => n.toLocaleString('en', {minimumFractionDigits: d, maximumFractionDigits: d});
-let S, off = 0, anim = false, tc;
+let S, off = 0, anim = false, tc, jettonRequest = 0;
+const miningRate = walletBalance => Number(walletBalance) < 1000 ? 0 : DAILY_RATES[Math.max(0, Math.min(DAILY_RATES.length - 1, Math.ceil(Number(walletBalance) / 1000) - 1))];
+const loginAvailable = s => !s.lastLogin || Date.now() - s.lastLogin >= DAY;
 
 function demo(p, b) {
   let d; try { d = JSON.parse(localStorage.bc); } catch (e) {}
-  d = d || {balance: 0, rate: 25, started: Date.now(), refs: 0, wallet: null, link: 'https://t.me/bellcoinbct_bot/app?startapp=r1', name: 'Guest'};
+  d = d || {balance: 0, rate: 700 / 24, started: Date.now(), refs: 0, wallet: null, link: 'https://t.me/bellcoinbct_bot/app?startapp=r1', name: 'Guest', loginStreak: 0, lastLogin: 0};
+  d.loginStreak = Number(d.loginStreak) || 0; d.lastLogin = Number(d.lastLogin) || 0;
   if (p === 'claim') { d.balance += acc(d, Date.now()); d.started = Date.now(); }
   if (p === 'wallet') d.wallet = (b && b.address) || null;
+  if (p === 'daily-login' && loginAvailable(d)) { d.loginStreak = (d.loginStreak % 7) + 1; d.balance += d.loginStreak * 10; d.lastLogin = Date.now(); }
   try { localStorage.bc = JSON.stringify(d); } catch (e) {}
   return Object.assign({}, d, {now: Date.now()});
 }
@@ -187,18 +202,46 @@ async function api(p, m, b) {
 const friendly = r => { try { return TON_CONNECT_UI.toUserFriendlyAddress(r); } catch (e) { return r || ''; } };
 
 function set(d) {
-  S = d; off = d.now - Date.now();
+  S = Object.assign({walletBalance: 0}, d); off = d.now - Date.now();
+  S.rate = miningRate(S.walletBalance) / 24;
   $('who').textContent = d.name; $('av').textContent = (d.name || 'G')[0].toUpperCase();
-  $('hr').textContent = d.rate; $('dy').textContent = '~' + d.rate * 24;
+  updateLogin();
   $('lnk').textContent = d.link; $('refs').textContent = d.refs;
-  if (d.wallet) { const a = friendly(d.wallet); $('addr').textContent = a.slice(0, 6) + '…' + a.slice(-6); $('wsub').textContent = 'Wallet linked to your account.'; }
-  else { $('addr').textContent = ''; $('wsub').textContent = 'Connect a wallet to link it to your BELLGRAM account.'; }
+  if (d.wallet) { const a = friendly(d.wallet); $('addr').textContent = a.slice(0, 6) + '…' + a.slice(-6); $('wsub').textContent = 'Wallet linked to your account.'; $('wbal').textContent = f(S.walletBalance, 4); loadWalletBalances(d.wallet); }
+  else { S.walletBalance = 0; $('wbal').textContent = '0.0000'; $('tonbal').textContent = '0.0000'; $('addr').textContent = ''; $('wsub').textContent = 'Connect a wallet to link it to your BELLGRAM account.'; }
   draw(); initTC();
 }
 function showBal(v) { $('bal').textContent = $('bal2').textContent = f(v, 4); }
 
+async function loadWalletBalances(address) {
+  const request = ++jettonRequest;
+  try {
+    const base = 'https://tonapi.io/v2/accounts/' + encodeURIComponent(address);
+    const [accountR, jettonR] = await Promise.all([fetch(base), fetch(base + '/jettons?limit=1000')]);
+    if (!accountR.ok || !jettonR.ok) throw new Error('TonAPI request failed');
+    const account = await accountR.json(), data = await jettonR.json();
+    const item = (data.balances || []).find(x => {
+      const a = x.jetton && String(x.jetton.address).toLowerCase();
+      return a === JETTON_MASTER.toLowerCase() || a === JETTON_MASTER_RAW.toLowerCase();
+    });
+    const value = item ? Number(item.balance) / (10 ** JETTON_DECIMALS) : 0;
+    if (request !== jettonRequest || !S || S.wallet !== address) return;
+    S.walletBalance = Number.isFinite(value) ? value : 0;
+    S.rate = miningRate(S.walletBalance) / 24;
+    $('tonbal').textContent = f((Number(account.balance) || 0) / 1e9, 4);
+    $('wbal').textContent = f(S.walletBalance, 4);
+    $('werr').textContent = '';
+    draw();
+  } catch (e) {
+    if (request === jettonRequest) $('werr').textContent = 'تعذر قراءة رصيد BELLGRAM الآن.';
+    console.error('BELLGRAM balance failed:', e);
+  }
+}
+
 function draw() {
   if (!S) return;
+  const dailyRate = miningRate(S.walletBalance); S.rate = dailyRate / 24;
+  $('hr').textContent = f(S.rate, 2); $('dy').textContent = dailyRate;
   const now = Date.now() + off, a = acc(S, now), left = Math.max(0, DAY - (now - S.started));
   $('mined').textContent = f(a, 4);
   $('claim').disabled = a < 0.01;
@@ -206,13 +249,35 @@ function draw() {
   $('left').textContent = `${p2(Math.floor(t / 3600))}:${p2(Math.floor(t % 3600 / 60))}:${p2(t % 60)}`;
   $('sb').style.width = (left / DAY * 100) + '%';
   if (!anim) showBal(S.balance);
-  let i = LV.length - 1; while (LV[i][1] > S.balance) i--;
+  const levelBalance = Number(S.walletBalance) || 0;
+  let i = Math.max(0, Math.min(LV.length - 1, Math.ceil(levelBalance / 1000) - 1));
   $('lvn').textContent = LV[i][0]; $('lvs').textContent = 'Lv.' + (i + 1); $('hex').textContent = i + 1; $('lvl').textContent = 'Level ' + (i + 1);
   const nx = LV[i + 1];
   $('nxl').textContent = nx ? i + 2 : 'Max';
-  $('prog').textContent = nx ? `${f(S.balance, 0)} / ${f(nx[1], 0)} BELL` : '';
-  $('lb').style.width = (nx ? (S.balance - LV[i][1]) / (nx[1] - LV[i][1]) * 100 : 100) + '%';
-  $('lt').textContent = nx ? `Hold ${f(nx[1], 0)} BELL to reach ${nx[0]}` : 'Top league reached';
+  const currentReq = LV[i][1], nextReq = nx ? nx[1] : currentReq;
+  const firstLevelProgress = levelBalance < currentReq;
+  $('prog').textContent = firstLevelProgress ? `${f(levelBalance, 0)} / ${f(currentReq, 0)} BELLGRAM` : (nx ? `${f(levelBalance, 0)} / ${f(nextReq, 0)} BELLGRAM` : `${f(levelBalance, 0)} BELLGRAM`);
+  $('lb').style.width = firstLevelProgress ? Math.max(0, Math.min(100, levelBalance / currentReq * 100)) + '%' : (nx ? Math.max(0, Math.min(100, (levelBalance - currentReq) / (nextReq - currentReq) * 100)) : '100%');
+  $('lt').textContent = nx ? `Hold ${f(nextReq, 0)} BELLGRAM to reach ${nx[0]}` : 'Top level reached';
+  updateLogin();
+  updateWithdraw();
+}
+
+function updateLogin() {
+  if (!S) return;
+  const streak = Number(S.loginStreak) || 0, nextDay = (streak % 7) + 1;
+  const ready = loginAvailable(S);
+  $('loginStreak').textContent = `Day ${Math.max(1, Math.min(7, ready ? nextDay : streak))}/7`;
+  $('loginInfo').textContent = ready ? `Claim ${nextDay * 10} BELL today` : `Next bonus: ${nextDay * 10} BELL in 24 hours`;
+  $('loginBtn').disabled = !ready;
+}
+
+function updateWithdraw() {
+  if (!S || !$('withdrawBtn')) return;
+  const enoughMined = Number(S.balance) >= 10000;
+  const enoughWallet = Number(S.walletBalance) >= 3000;
+  $('withdrawBtn').disabled = true;
+  $('withdrawMsg').textContent = enoughMined && enoughWallet ? 'You meet the balance requirements. Withdrawals will open soon.' : `Need ${enoughMined ? '0' : '10,000 mined BELL'} and ${enoughWallet ? '0' : '3,000 BELLGRAM in wallet'}.`;
 }
 function burst() {
   const w = $('mc');
@@ -231,6 +296,16 @@ $('claim').onclick = async () => {
   })(t0);
   const w = $('bw'); w.classList.remove('ring'); void w.offsetWidth; w.classList.add('ring');
   if (tg && tg.HapticFeedback) tg.HapticFeedback.notificationOccurred('success');
+};
+$('loginBtn').onclick = async () => {
+  if (!S || !loginAvailable(S)) return;
+  const day = Math.max(1, Math.min(7, (Number(S.loginStreak) || 0) + 1));
+  const d = await api('daily-login', 'POST');
+  anim = true; set(d);
+  $('loginMsg').textContent = `Daily bonus claimed: ${day * 10} BELL`;
+  setTimeout(() => $('loginMsg').textContent = '', 2500);
+  const from = S.balance - day * 10, t0 = performance.now();
+  (function step(n) { const k = Math.min(1, (n - t0) / 500); showBal(from + (S.balance - from) * k); if (k < 1) requestAnimationFrame(step); else anim = false; })(t0);
 };
 $('inv').onclick = () => {
   if (tg) tg.openTelegramLink('https://t.me/share/url?url=' + encodeURIComponent(S.link) + '&text=' + encodeURIComponent('Ring the bell with me on BELLGRAM 🔔'));
