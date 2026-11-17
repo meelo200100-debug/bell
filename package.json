@@ -1,10 +1,16 @@
 {
-  "name": "bell-coin",
+  "name": "bellgram-bot",
   "version": "1.0.0",
+  "description": "BELLGRAM Telegram Mini App & Bot (Turso Cloud DB)",
   "main": "server.js",
-  "scripts": { "start": "node server.js" },
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  },
   "dependencies": {
-    "better-sqlite3": "^11.0.0",
+    "@libsql/client": "^0.14.0",
     "express": "^4.19.2",
     "node-telegram-bot-api": "^0.66.0"
   }
