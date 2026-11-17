@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<title>Bell Coin</title>
+<title>BELLGRAM</title>
 <script src="https://telegram.org/js/telegram-web-app.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@tonconnect/ui@2/dist/tonconnect-ui.min.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Sora:wght@400;600&display=swap" rel="stylesheet">
@@ -147,8 +147,8 @@ nav button.on{color:var(--g);background:rgba(46,229,157,.12)}
  <section class="view" id="v-wallet">
   <div class="card"><small>App Balance</small><div class="bn"><span id="bal2">0</span> <em>BELL</em></div></div>
   <div class="card"><h2>TON wallet</h2>
-   <small id="wsub">Connect a wallet to link it to your Bell Coin account.</small>
-   <div id="tcbtn"></div><div class="addr" id="addr"></div></div>
+   <small id="wsub">Connect a wallet to link it to your BELLGRAM account.</small>
+   <div id="tcbtn"></div><div class="addr" id="addr"></div><small id="werr" role="status"></small></div>
   <div class="card"><small>Withdrawals are not open yet. Linking a wallet does not move any BELL. BELL points are for testing and have no monetary value.</small></div>
  </section>
 </main>
@@ -170,7 +170,7 @@ let S, off = 0, anim = false, tc;
 
 function demo(p, b) {
   let d; try { d = JSON.parse(localStorage.bc); } catch (e) {}
-  d = d || {balance: 0, rate: 25, started: Date.now(), refs: 0, wallet: null, link: 'https://t.me/YourBot/app?startapp=r1', name: 'Guest'};
+  d = d || {balance: 0, rate: 25, started: Date.now(), refs: 0, wallet: null, link: 'https://t.me/bellcoinbct_bot/app?startapp=r1', name: 'Guest'};
   if (p === 'claim') { d.balance += acc(d, Date.now()); d.started = Date.now(); }
   if (p === 'wallet') d.wallet = (b && b.address) || null;
   try { localStorage.bc = JSON.stringify(d); } catch (e) {}
@@ -184,7 +184,7 @@ async function api(p, m, b) {
     return await r.json();
   } catch (e) { return demo(p, b); }
 }
-const friendly = r => { try { return TON_CONNECT_UI.toUserFriendlyAddress(r); } catch (e) { return r; } };
+const friendly = r => { try { return TON_CONNECT_UI.toUserFriendlyAddress(r); } catch (e) { return r || ''; } };
 
 function set(d) {
   S = d; off = d.now - Date.now();
@@ -192,7 +192,7 @@ function set(d) {
   $('hr').textContent = d.rate; $('dy').textContent = '~' + d.rate * 24;
   $('lnk').textContent = d.link; $('refs').textContent = d.refs;
   if (d.wallet) { const a = friendly(d.wallet); $('addr').textContent = a.slice(0, 6) + '…' + a.slice(-6); $('wsub').textContent = 'Wallet linked to your account.'; }
-  else { $('addr').textContent = ''; $('wsub').textContent = 'Connect a wallet to link it to your Bell Coin account.'; }
+  else { $('addr').textContent = ''; $('wsub').textContent = 'Connect a wallet to link it to your BELLGRAM account.'; }
   draw(); initTC();
 }
 function showBal(v) { $('bal').textContent = $('bal2').textContent = f(v, 4); }
@@ -233,7 +233,7 @@ $('claim').onclick = async () => {
   if (tg && tg.HapticFeedback) tg.HapticFeedback.notificationOccurred('success');
 };
 $('inv').onclick = () => {
-  if (tg) tg.openTelegramLink('https://t.me/share/url?url=' + encodeURIComponent(S.link) + '&text=' + encodeURIComponent('Ring the bell with me on Bell Coin 🔔'));
+  if (tg) tg.openTelegramLink('https://t.me/share/url?url=' + encodeURIComponent(S.link) + '&text=' + encodeURIComponent('Ring the bell with me on BELLGRAM 🔔'));
   else { try { navigator.clipboard.writeText(S.link); $('inv').textContent = 'Link copied'; } catch (e) {} }
 };
 function go(v) {
@@ -246,13 +246,18 @@ $('toW').onclick = () => go('wallet');
 function initTC() {
   if (tc || !window.TON_CONNECT_UI) return;
   try {
-    tc = new TON_CONNECT_UI.TonConnectUI({manifestUrl: location.origin + '/tonconnect-manifest.json', buttonRootId: 'tcbtn',
+    const manifestUrl = new URL('tonconnect-manifest.json', document.baseURI).href;
+    tc = new TON_CONNECT_UI.TonConnectUI({manifestUrl, buttonRootId: 'tcbtn',
       uiPreferences: {theme: 'DARK'}, actionsConfiguration: {twaReturnUrl: S.link.split('?')[0]}});
     tc.onStatusChange(async w => {
       const a = w && w.account ? w.account.address : '';
+      $('werr').textContent = '';
       if ((S.wallet || '') !== a) set(await api('wallet', 'POST', {address: a}));
     });
-  } catch (e) {}
+  } catch (e) {
+    $('werr').textContent = 'Wallet connection is unavailable. Check that tonconnect-manifest.json is deployed.';
+    console.error('TonConnect initialization failed:', e);
+  }
 }
 api('me').then(set);
 setInterval(draw, 250);
