@@ -8,83 +8,78 @@
 <script src="https://cdn.jsdelivr.net/npm/@tonconnect/ui@2/dist/tonconnect-ui.min.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Sora:wght@400;600&display=swap" rel="stylesheet">
 <style>
-:root{--bg:#020b07;--pn:linear-gradient(145deg,rgba(8,36,26,0.9),rgba(4,16,11,0.95));--bd:#1b5e43;--g:#2ee59d;--g2:#12b57a;--mint:#9fffd2;--tx:#e9fff4;--mu:#7fb59d;--lime:#d7f542;--gold:#f0b84a}
+:root{--bg:#04100b;--pn:#08241a;--bd:#14503a;--g:#2ee59d;--g2:#12b57a;--mint:#9fffd2;--tx:#e9fff4;--mu:#7fb59d;--lime:#d7f542;--gold:#f0b84a}
 *{box-sizing:border-box;margin:0}
 html,body{height:100%}
-body{background:radial-gradient(600px 400px at 50% 0,rgba(46,229,157,.18),transparent 70%),var(--bg);color:var(--tx);font:15px/1.4 Sora,system-ui,sans-serif;display:flex;flex-direction:column;padding-top:env(safe-area-inset-top,0)}
+body{background:radial-gradient(500px 300px at 50% 0,rgba(46,229,157,.14),transparent 70%),var(--bg);color:var(--tx);font:15px/1.4 Sora,system-ui,sans-serif;display:flex;flex-direction:column;padding-top:env(safe-area-inset-top,0)}
 main{flex:1;overflow:auto;padding:12px 14px 10px;max-width:480px;width:100%;margin:0 auto}
 small{color:var(--mu);font-size:12.5px}
 .hd{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
-.logo{display:flex;align-items:center;gap:8px;font:800 22px Fraunces,serif;color:var(--g);text-shadow:0 0 10px rgba(46,229,157,0.4)}
+.logo{display:flex;align-items:center;gap:8px;font:800 22px Fraunces,serif;color:var(--g)}
 .logo svg{width:26px;height:26px}
-.prof{display:flex;align-items:center;gap:8px;background:var(--pn);border:1px solid var(--bd);border-radius:99px;padding:4px 14px 4px 4px;box-shadow:0 4px 15px rgba(0,0,0,0.5)}
+.prof{display:flex;align-items:center;gap:8px;background:var(--pn);border:1px solid var(--bd);border-radius:99px;padding:4px 14px 4px 4px}
 .av{width:32px;height:32px;border-radius:50%;background:linear-gradient(150deg,var(--g),var(--g2));color:#03150d;display:grid;place-items:center;font:800 15px Fraunces,serif}
 .prof b{display:block;font-size:13px;line-height:1.1}.prof small{font-size:11px}
-.banner{position:relative;height:160px;border-radius:24px;overflow:hidden;border:1px solid var(--bd);margin-bottom:14px;box-shadow:0 8px 30px rgba(4,16,11,0.8),inset 0 0 20px rgba(46,229,157,0.15)}
+.banner{position:relative;height:150px;border-radius:20px;overflow:hidden;border:1px solid var(--bd);margin-bottom:12px}
 .banner svg{position:absolute;inset:0;width:100%;height:100%}
-.bt{position:absolute;left:16px;bottom:16px;z-index:2}
-.bt h1{font:800 28px Fraunces,serif;text-shadow:0 2px 12px #000;color:#fff}
-.bt p{font-size:12.5px;color:var(--mint);font-weight:600}
-.card{background:linear-gradient(180deg,rgba(255,255,255,.05),rgba(255,255,255,.02)),var(--pn);border:1px solid var(--bd);border-radius:22px;padding:16px 18px;margin-bottom:14px;box-shadow:0 8px 25px rgba(0,0,0,0.4)}
+.bt{position:absolute;left:16px;bottom:14px}
+.bt h1{font:800 26px Fraunces,serif;text-shadow:0 2px 12px #000}
+.bt p{font-size:12px;color:var(--mint)}
+.card{background:linear-gradient(180deg,rgba(255,255,255,.04),rgba(255,255,255,.015)),var(--pn);border:1px solid var(--bd);border-radius:20px;padding:14px 16px;margin-bottom:12px}
 .row{display:flex;align-items:center;gap:12px;cursor:pointer}
 .row>div:nth-child(2){flex:1}
-.ico{flex:none;width:44px;height:44px;border-radius:14px;background:rgba(46,229,157,.12);border:1px solid var(--bd);display:grid;place-items:center;box-shadow:inset 0 0 10px rgba(46,229,157,0.2)}
+.ico{flex:none;width:42px;height:42px;border-radius:12px;background:rgba(46,229,157,.1);border:1px solid var(--bd);display:grid;place-items:center}
 .ico svg,.t svg{width:22px;height:22px;stroke:var(--g);fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
 .chev{width:20px;height:20px;stroke:var(--tx);fill:none;stroke-width:2;stroke-linecap:round}
 .bn{font:800 26px Fraunces,serif}.bn em,.mn em{font-style:normal;font-size:.62em;color:var(--g)}
-.mine{position:relative;overflow:hidden;border-color:#227a58;background:linear-gradient(145deg,rgba(10,45,33,0.95),rgba(3,15,10,0.98))}
+.mine{position:relative;overflow:hidden;border-color:#1c6b4d}
 .art{position:absolute;right:-12px;top:6px;width:190px;height:190px;opacity:.95;pointer-events:none}
 .mh{position:relative;display:flex;align-items:center;gap:12px}
 .mh>div:nth-child(2){flex:1}
 .run{display:flex;align-items:center;gap:6px;color:var(--g)}
 .run i{width:7px;height:7px;border-radius:50%;background:var(--g);box-shadow:0 0 8px var(--g)}
-.boost{border:1px solid #7d681f;background:rgba(240,184,74,.18);color:var(--gold);border-radius:99px;padding:4px 12px;font-weight:600;font-size:13px;z-index:1;box-shadow:0 0 15px rgba(240,184,74,0.2)}
-.mn{position:relative;font:800 40px Fraunces,serif;color:var(--mint);margin:14px 0 2px;text-shadow:0 0 25px rgba(46,229,157,.5)}
+.boost{border:1px solid #6b5a1c;background:rgba(240,184,74,.12);color:var(--gold);border-radius:99px;padding:3px 10px;font-weight:600;font-size:13px;z-index:1}
+.mn{position:relative;font:800 38px Fraunces,serif;color:var(--mint);margin:14px 0 2px;text-shadow:0 0 24px rgba(46,229,157,.45)}
 .pz{position:relative;display:block}
-.sess{position:relative;height:6px;background:rgba(255,255,255,.1);border-radius:6px;margin:12px 0 0;width:100%;overflow:hidden;box-shadow:inset 0 1px 3px rgba(0,0,0,0.5)}
-.sess i{display:block;height:100%;background:linear-gradient(90deg,var(--g2),var(--lime));width:100%;box-shadow:0 0 10px var(--g)}
-button{font:600 16px Sora,sans-serif;border:0;border-radius:16px;padding:15px;width:100%;cursor:pointer;transition:transform 0.1s ease}
-.go{position:relative;margin-top:16px;background:linear-gradient(180deg,#46f0ae,var(--g2));color:#03150d;box-shadow:0 6px 20px rgba(46,229,157,.35);font-weight:700}
-.go:active{transform:scale(0.98)}
+.sess{position:relative;height:5px;background:rgba(255,255,255,.08);border-radius:5px;margin:10px 0 0;width:58%;overflow:hidden}
+.sess i{display:block;height:100%;background:var(--g);width:100%}
+button{font:600 16px Sora,sans-serif;border:0;border-radius:14px;padding:14px;width:100%;cursor:pointer}
+.go{position:relative;margin-top:16px;background:linear-gradient(180deg,#46f0ae,var(--g2));color:#03150d;box-shadow:0 6px 20px rgba(46,229,157,.28)}
+.go:active{transform:translateY(1px)}
 .go:disabled{background:rgba(255,255,255,.07);color:var(--mu);box-shadow:none;cursor:not-allowed}
 button:focus-visible{outline:3px solid var(--lime);outline-offset:2px}
-.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:14px}
-.t{background:var(--pn);border:1px solid var(--bd);border-radius:18px;padding:10px 4px;text-align:center;box-shadow:0 4px 15px rgba(0,0,0,0.3)}
+.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:12px}
+.t{background:var(--pn);border:1px solid var(--bd);border-radius:16px;padding:10px 6px;text-align:center}
 .t svg{width:18px;height:18px;margin-bottom:2px}
-.t small{display:block;font-size:10.5px}.t b{display:block;font-size:14px;color:var(--mint)}.t span{font-size:10px;color:var(--mu)}
+.t small{display:block;font-size:11px}.t b{display:block;font-size:15px;color:var(--mint)}.t span{font-size:10.5px;color:var(--mu)}
 .lv{display:flex;align-items:center;gap:14px}
 .lv>div:nth-child(2){flex:1}
-.hex{flex:none;width:52px;height:58px;clip-path:polygon(50% 0,100% 25%,100% 75%,50% 100%,0 75%,0 25%);background:linear-gradient(160deg,var(--lime),var(--g));display:grid;place-items:center;color:#03150d;font:800 22px Fraunces,serif;box-shadow:0 0 15px rgba(215,245,66,0.4)}
+.hex{flex:none;width:50px;height:56px;clip-path:polygon(50% 0,100% 25%,100% 75%,50% 100%,0 75%,0 25%);background:linear-gradient(160deg,var(--lime),var(--g));display:grid;place-items:center;color:#03150d;font:800 22px Fraunces,serif}
 .lv .hd2{display:flex;justify-content:space-between;font-weight:600;font-size:14px}.lv .hd2 span{color:var(--mu);font-weight:400;font-size:12.5px}
-.bar{height:10px;background:rgba(255,255,255,.08);border-radius:10px;overflow:hidden;margin:8px 0 6px;box-shadow:inset 0 1px 3px rgba(0,0,0,0.5)}
-.bar i{display:block;height:100%;background:linear-gradient(90deg,var(--g2),var(--lime));width:0;transition:width .6s;box-shadow:0 0 8px var(--lime)}
-.soon{display:flex;align-items:center;gap:12px;opacity:.9}
-.soon>div:nth-child(2){flex:1}.soon em{font-style:normal;font-size:12px;color:var(--lime);border:1px solid #6c8022;background:rgba(215,245,66,0.1);border-radius:99px;padding:3px 12px;font-weight:600}
+.bar{height:9px;background:rgba(255,255,255,.08);border-radius:9px;overflow:hidden;margin:8px 0 6px}
+.bar i{display:block;height:100%;background:linear-gradient(90deg,var(--g2),var(--lime));width:0;transition:width .6s}
+.soon{display:flex;align-items:center;gap:12px;opacity:.85}
+.soon>div:nth-child(2){flex:1}.soon em{font-style:normal;font-size:12px;color:var(--lime);border:1px solid #5d6e1d;border-radius:99px;padding:2px 10px}
 .view{display:none}.view.on{display:block}
-h2{font:800 22px Fraunces,serif;margin-bottom:8px;color:var(--mint)}
-.link{word-break:break-all;background:rgba(0,0,0,.4);border-radius:12px;padding:12px;color:var(--mint);font-size:12px;margin:12px 0;border:1px solid var(--bd)}
+h2{font:800 22px Fraunces,serif;margin-bottom:6px}
+.link{word-break:break-all;background:rgba(0,0,0,.3);border-radius:10px;padding:10px;color:var(--mu);font-size:12px;margin:12px 0}
 #tcbtn{margin:14px 0 4px;display:flex;justify-content:center}
 .addr{font-size:13px;color:var(--g);text-align:center;word-break:break-all}
-.lvr{display:flex;justify-content:space-between;align-items:center;padding:10px 12px;border-radius:14px;font-size:14px;margin-top:8px;border:1px solid var(--bd);background:rgba(0,0,0,0.2)}
+.lvr{display:flex;justify-content:space-between;align-items:center;padding:9px 10px;border-radius:12px;font-size:14px;margin-top:6px;border:1px solid transparent}
 .lvr small{display:block}.lvr b{color:var(--mint)}
-.lvr.cur{background:rgba(46,229,157,.18);border-color:var(--g);box-shadow:0 0 12px rgba(46,229,157,0.2)}
+.lvr.cur{background:rgba(46,229,157,.12);border-color:var(--bd)}
 .err{color:#ffb4a8}
-#msg{position:fixed;left:14px;right:14px;bottom:calc(80px + env(safe-area-inset-bottom,0));max-width:452px;margin:0 auto;background:#3a1612;border:1px solid #7a2a20;color:#ffd7d0;border-radius:16px;padding:12px 16px;font-size:13px;display:none;z-index:5;box-shadow:0 5px 20px rgba(0,0,0,0.6)}
-.coin{position:absolute;left:78%;top:40%;width:14px;height:14px;border-radius:50%;background:radial-gradient(circle at 35% 30%,#fff3c4,var(--gold) 60%,#a86f12);animation:fly 1s ease-out forwards;pointer-events:none;z-index:2;box-shadow:0 0 8px var(--gold)}
+#msg{position:fixed;left:14px;right:14px;bottom:calc(76px + env(safe-area-inset-bottom,0));max-width:452px;margin:0 auto;background:#3a1612;border:1px solid #7a2a20;color:#ffd7d0;border-radius:14px;padding:10px 14px;font-size:13px;display:none;z-index:5}
+.coin{position:absolute;left:78%;top:40%;width:13px;height:13px;border-radius:50%;background:radial-gradient(circle at 35% 30%,#fff3c4,var(--gold) 60%,#a86f12);animation:fly .9s ease-out forwards;pointer-events:none;z-index:2}
 @keyframes fly{to{transform:translate(var(--x),var(--y)) scale(.4);opacity:0}}
-.fl{animation:float 4s ease-in-out infinite}@keyframes float{50%{transform:translateY(-8px)}}
+.fl{animation:float 4s ease-in-out infinite}@keyframes float{50%{transform:translateY(-6px)}}
 .swing{transform-origin:50px 14px}.ring .swing{animation:ring 1.2s ease-out}
 @keyframes ring{15%{transform:rotate(18deg)}35%{transform:rotate(-14deg)}55%{transform:rotate(9deg)}75%{transform:rotate(-4deg)}}
 @media(prefers-reduced-motion:reduce){*{animation:none!important}}
-nav{display:flex;gap:6px;padding:10px 14px calc(10px + env(safe-area-inset-bottom,0));background:rgba(2,11,7,0.95);border-top:1px solid var(--bd);backdrop-filter:blur(10px)}
-nav button{flex:1;background:none;color:var(--mu);padding:8px 4px;font-size:12px;border-radius:16px;display:flex;flex-direction:column;align-items:center;gap:4px;transition:all 0.2s ease}
+nav{display:flex;gap:6px;padding:8px 12px calc(8px + env(safe-area-inset-bottom,0));background:rgba(4,16,11,.94);border-top:1px solid var(--bd)}
+nav button{flex:1;background:none;color:var(--mu);padding:8px 4px;font-size:12px;border-radius:14px;display:flex;flex-direction:column;align-items:center;gap:3px}
 nav svg{width:22px;height:22px;stroke:currentColor;fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
-nav button.on{color:var(--g);background:rgba(46,229,157,.15);box-shadow:0 0 15px rgba(46,229,157,0.2)}
-.btn-row{display:flex;gap:10px;margin-top:12px}
-.btn-row button{margin-top:0;flex:1}
-.friend-item{display:flex;justify-content:space-between;align-items:center;padding:8px 12px;background:rgba(0,0,0,0.2);border:1px solid var(--bd);border-radius:10px;margin-top:6px;font-size:13px}
-.friend-item span:first-child{color:var(--mu)}
-.friend-item b{color:var(--mint)}
+nav button.on{color:var(--g);background:rgba(46,229,157,.12)}
 </style>
 </head>
 <body>
@@ -97,19 +92,14 @@ nav button.on{color:var(--g);background:rgba(46,229,157,.15);box-shadow:0 0 15px
  <section class="view on" id="v-home">
   <div class="banner">
    <svg viewBox="0 0 400 150" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
-    <defs>
-      <radialGradient id="pg" cx="50%" cy="50%" r="50%"><stop offset="0" stop-color="#b6ffe0"/><stop offset=".4" stop-color="#2ee59d" stop-opacity=".75"/><stop offset="1" stop-color="#2ee59d" stop-opacity="0"/></radialGradient>
-      <linearGradient id="sk" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#020b07"/><stop offset="1" stop-color="#0b3d2a"/></linearGradient>
-      <linearGradient id="goldg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ffe29a"/><stop offset=".55" stop-color="#e3a93c"/><stop offset="1" stop-color="#a86f12"/></linearGradient>
-    </defs>
+    <defs><radialGradient id="pg"><stop offset="0" stop-color="#b6ffe0"/><stop offset=".4" stop-color="#2ee59d" stop-opacity=".75"/><stop offset="1" stop-color="#2ee59d" stop-opacity="0"/></radialGradient>
+    <linearGradient id="sk" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#020b07"/><stop offset="1" stop-color="#0b3d2a"/></linearGradient></defs>
     <rect width="400" height="150" fill="url(#sk)"/>
-    <g fill="#bfffe5" opacity="0.6"><circle cx="30" cy="25" r="1.5"/><circle cx="90" cy="55" r="1.2"/><circle cx="160" cy="20" r="1.8"/><circle cx="230" cy="65" r="1.2"/><circle cx="360" cy="30" r="1.6"/><circle cx="130" cy="110" r="1.2"/></g>
-    <circle cx="290" cy="72" r="70" fill="url(#pg)" opacity="0.8"/>
-    <ellipse cx="290" cy="72" rx="46" ry="58" fill="none" stroke="#9fffd2" stroke-width="2.5" opacity="0.5"/>
-    <g transform="translate(250, 32) scale(0.8)">
-      <path d="M50 12c-3 0-5 2-5 5-14 4-22 16-22 31v14l-7 9v3h68v-3l-7-9V48c0-15-8-27-22-31 0-3-2-5-5-5z" fill="url(#goldg)"/>
-      <circle cx="50" cy="86" r="8" fill="url(#goldg)"/>
-    </g>
+    <g fill="#bfffe5"><circle cx="24" cy="22" r="1.2"/><circle cx="80" cy="48" r="1"/><circle cx="150" cy="18" r="1.4"/><circle cx="210" cy="60" r="1"/><circle cx="372" cy="26" r="1.3"/><circle cx="120" cy="96" r="1"/><circle cx="238" cy="20" r="1"/></g>
+    <circle cx="290" cy="72" r="70" fill="url(#pg)"/>
+    <ellipse cx="290" cy="72" rx="44" ry="56" fill="none" stroke="#9fffd2" stroke-width="3"/>
+    <ellipse cx="290" cy="72" rx="31" ry="42" fill="#03120c" stroke="#2ee59d" stroke-width="2"/>
+    <path d="M318 122l34-7 20 9-16 15h-34z" fill="#0e4a34"/><path d="M228 108l22-5 14 7-12 10h-22z" fill="#0c3d2b"/><path d="M356 52l16-4 10 5-8 8h-16z" fill="#0e4a34"/>
    </svg>
    <div class="bt"><h1>Bell Mining</h1><p>Mine · Collect · Level up · Invite</p></div>
   </div>
@@ -159,16 +149,8 @@ nav button.on{color:var(--g);background:rgba(46,229,157,.15);box-shadow:0 0 15px
   <div class="card"><h2>Invite friends</h2>
    <small>You and your friend both get 50 BELL when they join.</small>
    <div class="link" id="lnk"></div>
-   <div class="btn-row">
-     <button class="go" id="copyBtn" style="background:rgba(46,229,157,0.15);color:var(--g);border:1px solid var(--bd)">Copy link</button>
-     <button class="go" id="inv">Share link</button>
-   </div></div>
-  <div class="card">
-   <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
-     <small>Friends joined</small><b id="refs" style="color:var(--mint)">0</b>
-   </div>
-   <div id="friendsList" style="margin-top:10px"></div>
-  </div>
+   <button class="go" id="inv">Share invite link</button></div>
+  <div class="card"><small>Friends joined</small><div class="bn" id="refs">0</div></div>
  </section>
 
  <section class="view" id="v-wallet">
@@ -193,12 +175,13 @@ nav button.on{color:var(--g);background:rgba(46,229,157,.15);box-shadow:0 0 15px
 </nav>
 
 <script>
+// All balances, levels and mining are computed by the server. This page only displays them.
 const tg = window.Telegram && Telegram.WebApp;
 const IN_TG = !!(tg && tg.initData);
-if (tg) { tg.ready(); tg.expand(); try { tg.setHeaderColor('#020b07'); tg.setBackgroundColor('#020b07'); } catch (e) {} }
+if (tg) { tg.ready(); tg.expand(); try { tg.setHeaderColor('#04100b'); tg.setBackgroundColor('#04100b'); } catch (e) {} }
 const $ = id => document.getElementById(id);
 const DAY = 864e5;
-const LV = [['Free',0,500],['Tin',1000,700],['Copper',2000,800],['Brass',3000,900],['Silver',4000,1000],['BELLGRAM',5000,1100]];
+const LV = [['Free',0,500],['Tin',1000,700],['Copper',2000,800],['Brass',3000,900],['Silver',4000,1000],['BELLGRAM',5000,1100]]; // [name, hold, BELL/day]
 const f = (n, d) => (Number(n) || 0).toLocaleString('en', {minimumFractionDigits: d, maximumFractionDigits: d});
 let S, off = 0, anim = false, busy = false, tc;
 
@@ -213,6 +196,7 @@ const errText = e => ERR[e && e.code] || (e && e.code ? 'Wallet ownership could 
 let msgT;
 function toast(t) { const m = $('msg'); m.textContent = t; m.style.display = 'block'; clearTimeout(msgT); msgT = setTimeout(() => m.style.display = 'none', 4500); }
 
+// Preview mode (page opened in a normal browser, not inside Telegram): local fake data, no wallet.
 function demo(p) {
   let d; try { d = JSON.parse(localStorage.bcd); } catch (e) {}
   d = d || {balance: 0, mined: 0, started: Date.now(), loginStreak: 0, lastLogin: 0};
@@ -221,9 +205,8 @@ function demo(p) {
   if (p === 'daily-login' && (!d.lastLogin || now - d.lastLogin >= DAY)) { d.loginStreak = (d.loginStreak % 7) + 1; d.balance += d.loginStreak * 10; d.lastLogin = now; }
   try { localStorage.bcd = JSON.stringify(d); } catch (e) {}
   return {now, name: 'Preview', balance: d.balance, mined: d.mined, pending: pend(), rate: 500, endsAt: d.started + DAY, level: 0,
-    wallet: null, walletBalance: 0, tonBalance: 0, walletError: false, refs: 2, link: 'https://t.me/bellcoinbct_bot/app?startapp=r123',
-    loginStreak: d.loginStreak, lastLogin: d.lastLogin, withdraw: {minBalance: 10000, minWallet: 3000, open: false, eligible: false},
-    friendsList: ['Ahmed Mohamed', 'Karem Ali']};
+    wallet: null, walletBalance: 0, tonBalance: 0, walletError: false, refs: 0, link: 'https://t.me/bellcoinbct_bot/app',
+    loginStreak: d.loginStreak, lastLogin: d.lastLogin, withdraw: {minBalance: 10000, minWallet: 3000, open: false, eligible: false}};
 }
 async function api(p, m, b) {
   if (!IN_TG) return demo(p);
@@ -242,24 +225,17 @@ function set(d) {
   S = d; off = d.now - Date.now();
   $('who').textContent = d.name; $('av').textContent = (d.name || 'G')[0].toUpperCase();
   $('lnk').textContent = d.link; $('refs').textContent = d.refs;
-  
-  const flist = d.friendsList || [];
-  if (flist.length === 0) {
-    $('friendsList').innerHTML = '<small style="color:var(--mu);display:block;text-align:center;padding:10px">No friends invited yet.</small>';
-  } else {
-    $('friendsList').innerHTML = flist.map((name, i) => `<div class="friend-item"><span>#${i + 1}</span><b>${name}</b></div>`).join('');
-  }
-
   const lv = d.level, boost = (d.rate / LV[0][2]).toFixed(2);
-  $('hr').textContent = f(d.rate / 24, 2);$('dy').textContent = f(d.rate, 0);
-  $('bst').textContent =$('bst2').textContent = boost;
-  $('lvn').textContent = LV[lv][0];$('lvs').textContent = 'Lv.' + lv; $('hex').textContent = lv; $('lvl').textContent = 'Level ' + lv;
-  $('mt').textContent =$('mt2').textContent = f(d.mined, 4);
-  $('wbal').textContent = f(d.walletBalance, 4);$('tonbal').textContent = f(d.tonBalance, 4);
-  if (d.wallet) { const a = friendly(d.wallet); $('addr').textContent = a.slice(0, 6) + '…' + a.slice(-6);$('wsub').textContent = 'Wallet linked to your account.'; }
-  else { $('addr').textContent = '';$('wsub').textContent = IN_TG ? 'Connect a wallet to link it to your BELLGRAM account.' : 'Open the app inside Telegram to connect a wallet.'; }
+  $('hr').textContent = f(d.rate / 24, 2); $('dy').textContent = f(d.rate, 0);
+  $('bst').textContent = $('bst2').textContent = boost;
+  $('lvn').textContent = LV[lv][0]; $('lvs').textContent = 'Lv.' + lv; $('hex').textContent = lv; $('lvl').textContent = 'Level ' + lv;
+  $('mt').textContent = $('mt2').textContent = f(d.mined, 4);
+  $('wbal').textContent = f(d.walletBalance, 4); $('tonbal').textContent = f(d.tonBalance, 4);
+  if (d.wallet) { const a = friendly(d.wallet); $('addr').textContent = a.slice(0, 6) + '…' + a.slice(-6); $('wsub').textContent = 'Wallet linked to your account.'; }
+  else { $('addr').textContent = ''; $('wsub').textContent = IN_TG ? 'Connect a wallet to link it to your BELLGRAM account.' : 'Open the app inside Telegram to connect a wallet.'; }
   if (d.walletError) $('werr').textContent = 'Could not read your BELLGRAM balance right now. Showing the last known value.';
-  else if (!(tc && !d.wallet && $('werr').textContent)) $('werr').textContent = '';$('lvList').innerHTML = LV.map((l, i) => `<div class="lvr${i === lv ? ' cur' : ''}"><div><b>${i} · ${l[0]}</b><small>${i ? 'Hold ' + f(l[1], 0) + '+ BELLGRAM' : 'No BELLGRAM needed'}</small></div><div>${f(l[2], 0)} BELL/day</div></div>`).join('');
+  else if (!(tc && !d.wallet && $('werr').textContent)) $('werr').textContent = '';
+  $('lvList').innerHTML = LV.map((l, i) => `<div class="lvr${i === lv ? ' cur' : ''}"><div><b>${i} · ${l[0]}</b><small>${i ? 'Hold ' + f(l[1], 0) + '+ BELLGRAM' : 'No BELLGRAM needed'}</small></div><div>${f(l[2], 0)} BELL/day</div></div>`).join('');
   const w = d.withdraw, need = [];
   if (d.balance < w.minBalance) need.push(f(w.minBalance, 0) + ' BELL in your app balance');
   if (d.walletBalance < w.minWallet) need.push(f(w.minWallet, 0) + ' BELLGRAM in your wallet');
@@ -267,12 +243,13 @@ function set(d) {
   $('withdrawBtn').disabled = true;
   draw();
 }
-function showBal(v) { $('bal').textContent =$('bal2').textContent = f(v, 4); }
+function showBal(v) { $('bal').textContent = $('bal2').textContent = f(v, 4); }
 
 function draw() {
   if (!S) return;
   const now = adj(), a = pend(), left = Math.max(0, S.endsAt - now);
-  $('mined').textContent = f(a, 4);$('claim').disabled = busy || a < 0.01;
+  $('mined').textContent = f(a, 4);
+  $('claim').disabled = busy || a < 0.01;
   const t = Math.floor(left / 1000), p2 = n => String(n).padStart(2, '0');
   $('left').textContent = `${p2(Math.floor(t / 3600))}:${p2(Math.floor(t % 3600 / 60))}:${p2(t % 60)}`;
   $('runtxt').textContent = left > 0 ? 'Running' : 'Paused · claim to restart';
@@ -316,16 +293,10 @@ $('loginBtn').onclick = () => act('daily-login', (from, d) => {
   const got = d.balance - from;
   $('loginMsg').textContent = got > 0 ? `Daily bonus claimed: ${f(got, 0)} BELL` : '';
   setTimeout(() => $('loginMsg').textContent = '', 2500);
-});$('inv').onclick = () => {
+});
+$('inv').onclick = () => {
   if (tg) tg.openTelegramLink('https://t.me/share/url?url=' + encodeURIComponent(S.link) + '&text=' + encodeURIComponent('Ring the bell with me on BELLGRAM 🔔'));
-  else { try { navigator.clipboard.writeText(S.link); toast('Link copied to clipboard!'); } catch (e) {} }
-};
-$('copyBtn').onclick = () => {
-  navigator.clipboard.writeText(S.link).then(() => {
-    toast('Link copied successfully!');
-  }).catch(() => {
-    toast('Failed to copy link.');
-  });
+  else { try { navigator.clipboard.writeText(S.link); $('inv').textContent = 'Link copied'; } catch (e) {} }
 };
 function go(v) {
   document.querySelectorAll('nav button,.view').forEach(x => x.classList.remove('on'));
@@ -334,6 +305,7 @@ function go(v) {
 document.querySelectorAll('nav button').forEach(b => b.onclick = () => go(b.dataset.v));
 $('toW').onclick = () => go('wallet');
 
+// ---- TON Connect: the wallet is linked only after the server verifies a signed ownership proof ----
 async function refreshProof() {
   if (!tc) return;
   tc.setConnectRequestParameters({state: 'loading'});
@@ -360,4 +332,20 @@ async function initTC() {
   try {
     const retUrl = (S.link && S.link.startsWith('https://t.me/')) ? S.link.split('?')[0] : undefined;
     tc = new TON_CONNECT_UI.TonConnectUI({
-      manifestUrl: new URL('ton
+      manifestUrl: new URL('tonconnect-manifest.json', document.baseURI).href,
+      buttonRootId: 'tcbtn',
+      uiPreferences: {theme: 'DARK'},
+      actionsConfiguration: retUrl ? {twaReturnUrl: retUrl} : undefined
+    });
+    await refreshProof();
+    try { await tc.connectionRestored; } catch (e) {}
+    tc.onStatusChange(onWallet);
+    setInterval(() => { if (!tc.connected) refreshProof(); }, 480000);
+  } catch (e) { $('werr').textContent = 'Wallet connection is unavailable. Check that tonconnect-manifest.json is deployed.'; console.error(e); }
+}
+
+api('me').then(d => { set(d); initTC(); }).catch(e => { toast(errText(e)); $('who').textContent = 'Offline'; });
+setInterval(draw, 250);
+</script>
+</body>
+</html>
