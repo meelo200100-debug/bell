@@ -1,0 +1,160 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Bell Coin</title>
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,800&family=Sora:wght@400;600&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#0c1f24;--panel:#122c30;--line:#21474b;--brass:#e3a93c;--cream:#f3ead7;--verd:#4fc3a8;--mute:#86a39f}
+*{box-sizing:border-box;margin:0}
+html,body{height:100%}
+body{background:var(--bg);color:var(--cream);font:15px/1.4 Sora,system-ui,sans-serif;display:flex;flex-direction:column;padding-top:env(safe-area-inset-top,0)}
+main{flex:1;overflow:auto;padding:16px 16px 8px;max-width:480px;width:100%;margin:0 auto}
+h1,.big{font-family:Fraunces,Georgia,serif}
+.top{display:flex;justify-content:space-between;align-items:center;margin-bottom:14px}
+.top b{font:800 22px Fraunces,serif;color:var(--brass)}
+.chip{border:1px solid var(--line);border-radius:99px;padding:4px 12px;color:var(--mute);font-size:13px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:18px;padding:16px;margin-bottom:12px}
+.hero{text-align:center;padding:22px 16px 18px}
+.bellwrap{position:relative;width:200px;height:200px;margin:0 auto 8px}
+.bellwrap svg{position:absolute;inset:0;width:100%;height:100%}
+.swing{transform-origin:50px 14px}
+.ring .swing{animation:ring 1.2s ease-out}
+@keyframes ring{15%{transform:rotate(18deg)}35%{transform:rotate(-14deg)}55%{transform:rotate(9deg)}75%{transform:rotate(-4deg)}}
+@media(prefers-reduced-motion:reduce){.ring .swing{animation:none}}
+.mined{font:800 34px Fraunces,serif;color:var(--verd)}
+.sub{color:var(--mute);font-size:13px}
+button{font:600 16px Sora,sans-serif;border:0;border-radius:14px;padding:14px;width:100%;cursor:pointer}
+.go{background:var(--brass);color:#2a1c05;margin-top:14px}
+.go:disabled{background:var(--line);color:var(--mute);cursor:not-allowed}
+button:focus-visible{outline:3px solid var(--verd);outline-offset:2px}
+.bal{font:800 30px Fraunces,serif}
+.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:12px}
+.stats .card{margin:0;padding:12px;text-align:center}
+.stats b{display:block;font-size:17px}
+.bar{height:8px;background:var(--line);border-radius:9px;overflow:hidden;margin:10px 0 6px}
+.bar i{display:block;height:100%;background:var(--brass);width:0}
+.view{display:none}.view.on{display:block}
+nav{display:flex;background:var(--panel);border-top:1px solid var(--line);padding-bottom:env(safe-area-inset-bottom,0)}
+nav button{background:none;color:var(--mute);border-radius:0;padding:12px 4px;font-size:13px}
+nav button.on{color:var(--brass)}
+.link{word-break:break-all;background:var(--bg);border-radius:10px;padding:10px;color:var(--mute);font-size:12px;margin:10px 0}
+</style>
+</head>
+<body>
+<main>
+ <div class="top"><b>Bell Coin</b><span class="chip" id="who">Guest</span></div>
+
+ <section class="view on" id="v-home">
+  <div class="card hero">
+   <div class="bellwrap" id="bw">
+    <svg viewBox="0 0 100 100" aria-hidden="true">
+     <circle cx="50" cy="50" r="46" fill="none" stroke="#21474b" stroke-width="3"/>
+     <circle id="ring" cx="50" cy="50" r="46" fill="none" stroke="#4fc3a8" stroke-width="3" stroke-linecap="round" stroke-dasharray="289" stroke-dashoffset="289" transform="rotate(-90 50 50)"/>
+    </svg>
+    <svg viewBox="0 0 100 100" aria-hidden="true">
+     <defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#f6d27a"/><stop offset="1" stop-color="#b9801f"/></linearGradient></defs>
+     <g class="swing" transform="scale(.7) translate(21 14)">
+      <path d="M50 12c-3 0-5 2-5 5-14 4-22 16-22 31v14l-7 9v3h68v-3l-7-9V48c0-15-8-27-22-31 0-3-2-5-5-5z" fill="url(#g)"/>
+      <circle cx="50" cy="84" r="8" fill="#b9801f"/>
+     </g>
+    </svg>
+   </div>
+   <div class="mined" id="mined">+0.0000</div>
+   <div class="sub">BELL ready to collect · resets in <span id="left">24:00:00</span></div>
+   <button class="go" id="claim" disabled>Collect BELL</button>
+  </div>
+  <div class="stats">
+   <div class="card"><b id="hr">25</b><span class="sub">per hour</span></div>
+   <div class="card"><b id="dy">600</b><span class="sub">per day</span></div>
+   <div class="card"><b id="lvn">Tin</b><span class="sub">league</span></div>
+  </div>
+  <div class="card"><span class="sub">Balance</span><div class="bal"><span id="bal">0</span> BELL</div>
+   <div class="bar"><i id="lb"></i></div><span class="sub" id="lt"></span></div>
+ </section>
+
+ <section class="view" id="v-friends">
+  <div class="card"><h1>Invite friends</h1>
+   <p class="sub">You and your friend both get 50 BELL when they join.</p>
+   <div class="link" id="lnk"></div>
+   <button class="go" id="inv">Share invite link</button></div>
+  <div class="card"><span class="sub">Friends joined</span><div class="bal" id="refs">0</div></div>
+ </section>
+
+ <section class="view" id="v-wallet">
+  <div class="card"><h1>Wallet</h1>
+   <div class="bal"><span id="bal2">0</span> BELL</div>
+   <p class="sub" style="margin-top:8px">Withdrawals are not open yet. Keep collecting to grow your balance.</p></div>
+ </section>
+</main>
+
+<nav>
+ <button class="on" data-v="home">Home</button>
+ <button data-v="friends">Friends</button>
+ <button data-v="wallet">Wallet</button>
+</nav>
+
+<script>
+const tg = window.Telegram && Telegram.WebApp;
+if (tg) { tg.ready(); tg.expand(); }
+const $ = id => document.getElementById(id);
+const DAY = 864e5, LV = [['Tin',0],['Copper',100],['Brass',1000],['Silver',5000],['Gold',25000]];
+const acc = (s, n) => s.rate * Math.min(n - s.started, DAY) / 36e5;
+const f = (n, d) => n.toLocaleString('en', {minimumFractionDigits: d, maximumFractionDigits: d});
+let S, off = 0;
+
+// Demo mode: when the page is opened without the backend, state lives in localStorage.
+function demo(p) {
+  let d; try { d = JSON.parse(localStorage.bc); } catch (e) {}
+  d = d || {balance: 0, rate: 25, started: Date.now(), refs: 0, link: 'https://t.me/YourBot/app?startapp=r1', name: 'Guest'};
+  if (p === 'claim') { d.balance += acc(d, Date.now()); d.started = Date.now(); }
+  try { localStorage.bc = JSON.stringify(d); } catch (e) {}
+  return Object.assign({}, d, {now: Date.now()});
+}
+async function api(p, m) {
+  try {
+    const r = await fetch('/api/' + p, {method: m || 'GET', headers: {'x-init': tg ? tg.initData : ''}});
+    if (!r.ok) throw 0;
+    return await r.json();
+  } catch (e) { return demo(p); }
+}
+function set(d) { S = d; off = d.now - Date.now(); $('who').textContent = d.name; $('hr').textContent = d.rate;
+  $('dy').textContent = '~' + d.rate * 24; $('lnk').textContent = d.link; $('refs').textContent = d.refs; draw(); }
+
+function draw() {
+  if (!S) return;
+  const now = Date.now() + off, a = acc(S, now), left = Math.max(0, DAY - (now - S.started));
+  $('mined').textContent = '+' + f(a, 4);
+  $('claim').disabled = a < 0.01;
+  const t = Math.floor(left / 1000), p2 = n => String(n).padStart(2, '0');
+  $('left').textContent = `${p2(Math.floor(t / 3600))}:${p2(Math.floor(t % 3600 / 60))}:${p2(t % 60)}`;
+  $('ring').style.strokeDashoffset = 289 * (left / DAY);
+  $('bal').textContent = $('bal2').textContent = f(S.balance, 2);
+  let i = LV.length - 1; while (LV[i][1] > S.balance) i--;
+  $('lvn').textContent = LV[i][0];
+  const nx = LV[i + 1];
+  $('lb').style.width = (nx ? (S.balance - LV[i][1]) / (nx[1] - LV[i][1]) * 100 : 100) + '%';
+  $('lt').textContent = nx ? `Hold ${f(nx[1], 0)} BELL to reach ${nx[0]}` : 'Top league reached';
+}
+
+$('claim').onclick = async () => {
+  set(await api('claim', 'POST'));
+  const w = $('bw'); w.classList.remove('ring'); void w.offsetWidth; w.classList.add('ring');
+  if (tg && tg.HapticFeedback) tg.HapticFeedback.notificationOccurred('success');
+};
+$('inv').onclick = () => {
+  if (tg) tg.openTelegramLink('https://t.me/share/url?url=' + encodeURIComponent(S.link) + '&text=' + encodeURIComponent('Ring the bell with me on Bell Coin 🔔'));
+  else { try { navigator.clipboard.writeText(S.link); $('inv').textContent = 'Link copied'; } catch (e) {} }
+};
+document.querySelectorAll('nav button').forEach(b => b.onclick = () => {
+  document.querySelectorAll('nav button,.view').forEach(x => x.classList.remove('on'));
+  b.classList.add('on'); $('v-' + b.dataset.v).classList.add('on');
+});
+
+api('me').then(set);
+setInterval(draw, 250);
+</script>
+</body>
+</html>
