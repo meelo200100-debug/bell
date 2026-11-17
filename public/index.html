@@ -80,6 +80,11 @@ nav{display:flex;gap:6px;padding:10px 14px calc(10px + env(safe-area-inset-botto
 nav button{flex:1;background:none;color:var(--mu);padding:8px 4px;font-size:12px;border-radius:16px;display:flex;flex-direction:column;align-items:center;gap:4px;transition:all 0.2s ease}
 nav svg{width:22px;height:22px;stroke:currentColor;fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
 nav button.on{color:var(--g);background:rgba(46,229,157,.15);box-shadow:0 0 15px rgba(46,229,157,0.2)}
+.btn-row{display:flex;gap:10px;margin-top:12px}
+.btn-row button{margin-top:0;flex:1}
+.friend-item{display:flex;justify-content:space-between;align-items:center;padding:8px 12px;background:rgba(0,0,0,0.2);border:1px solid var(--bd);border-radius:10px;margin-top:6px;font-size:13px}
+.friend-item span:first-child{color:var(--mu)}
+.friend-item b{color:var(--mint)}
 </style>
 </head>
 <body>
@@ -154,8 +159,16 @@ nav button.on{color:var(--g);background:rgba(46,229,157,.15);box-shadow:0 0 15px
   <div class="card"><h2>Invite friends</h2>
    <small>You and your friend both get 50 BELL when they join.</small>
    <div class="link" id="lnk"></div>
-   <button class="go" id="inv">Share invite link</button></div>
-  <div class="card"><small>Friends joined</small><div class="bn" id="refs">0</div></div>
+   <div class="btn-row">
+     <button class="go" id="copyBtn" style="background:rgba(46,229,157,0.15);color:var(--g);border:1px solid var(--bd)">Copy link</button>
+     <button class="go" id="inv">Share link</button>
+   </div></div>
+  <div class="card">
+   <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+     <small>Friends joined</small><b id="refs" style="color:var(--mint)">0</b>
+   </div>
+   <div id="friendsList" style="margin-top:10px"></div>
+  </div>
  </section>
 
  <section class="view" id="v-wallet">
@@ -208,8 +221,9 @@ function demo(p) {
   if (p === 'daily-login' && (!d.lastLogin || now - d.lastLogin >= DAY)) { d.loginStreak = (d.loginStreak % 7) + 1; d.balance += d.loginStreak * 10; d.lastLogin = now; }
   try { localStorage.bcd = JSON.stringify(d); } catch (e) {}
   return {now, name: 'Preview', balance: d.balance, mined: d.mined, pending: pend(), rate: 500, endsAt: d.started + DAY, level: 0,
-    wallet: null, walletBalance: 0, tonBalance: 0, walletError: false, refs: 0, link: 'https://t.me/bellcoinbct_bot/app',
-    loginStreak: d.loginStreak, lastLogin: d.lastLogin, withdraw: {minBalance: 10000, minWallet: 3000, open: false, eligible: false}};
+    wallet: null, walletBalance: 0, tonBalance: 0, walletError: false, refs: 2, link: 'https://t.me/bellcoinbct_bot/app?startapp=r123',
+    loginStreak: d.loginStreak, lastLogin: d.lastLogin, withdraw: {minBalance: 10000, minWallet: 3000, open: false, eligible: false},
+    friendsList: ['Ahmed Mohamed', 'Karem Ali']};
 }
 async function api(p, m, b) {
   if (!IN_TG) return demo(p);
@@ -228,17 +242,24 @@ function set(d) {
   S = d; off = d.now - Date.now();
   $('who').textContent = d.name; $('av').textContent = (d.name || 'G')[0].toUpperCase();
   $('lnk').textContent = d.link; $('refs').textContent = d.refs;
+  
+  const flist = d.friendsList || [];
+  if (flist.length === 0) {
+    $('friendsList').innerHTML = '<small style="color:var(--mu);display:block;text-align:center;padding:10px">No friends invited yet.</small>';
+  } else {
+    $('friendsList').innerHTML = flist.map((name, i) => `<div class="friend-item"><span>#${i + 1}</span><b>${name}</b></div>`).join('');
+  }
+
   const lv = d.level, boost = (d.rate / LV[0][2]).toFixed(2);
-  $('hr').textContent = f(d.rate / 24, 2); $('dy').textContent = f(d.rate, 0);
-  $('bst').textContent = $('bst2').textContent = boost;
-  $('lvn').textContent = LV[lv][0]; $('lvs').textContent = 'Lv.' + lv; $('hex').textContent = lv; $('lvl').textContent = 'Level ' + lv;
-  $('mt').textContent = $('mt2').textContent = f(d.mined, 4);
-  $('wbal').textContent = f(d.walletBalance, 4); $('tonbal').textContent = f(d.tonBalance, 4);
-  if (d.wallet) { const a = friendly(d.wallet); $('addr').textContent = a.slice(0, 6) + '…' + a.slice(-6); $('wsub').textContent = 'Wallet linked to your account.'; }
-  else { $('addr').textContent = ''; $('wsub').textContent = IN_TG ? 'Connect a wallet to link it to your BELLGRAM account.' : 'Open the app inside Telegram to connect a wallet.'; }
+  $('hr').textContent = f(d.rate / 24, 2);$('dy').textContent = f(d.rate, 0);
+  $('bst').textContent =$('bst2').textContent = boost;
+  $('lvn').textContent = LV[lv][0];$('lvs').textContent = 'Lv.' + lv; $('hex').textContent = lv; $('lvl').textContent = 'Level ' + lv;
+  $('mt').textContent =$('mt2').textContent = f(d.mined, 4);
+  $('wbal').textContent = f(d.walletBalance, 4);$('tonbal').textContent = f(d.tonBalance, 4);
+  if (d.wallet) { const a = friendly(d.wallet); $('addr').textContent = a.slice(0, 6) + '…' + a.slice(-6);$('wsub').textContent = 'Wallet linked to your account.'; }
+  else { $('addr').textContent = '';$('wsub').textContent = IN_TG ? 'Connect a wallet to link it to your BELLGRAM account.' : 'Open the app inside Telegram to connect a wallet.'; }
   if (d.walletError) $('werr').textContent = 'Could not read your BELLGRAM balance right now. Showing the last known value.';
-  else if (!(tc && !d.wallet && $('werr').textContent)) $('werr').textContent = '';
-  $('lvList').innerHTML = LV.map((l, i) => `<div class="lvr${i === lv ? ' cur' : ''}"><div><b>${i} · ${l[0]}</b><small>${i ? 'Hold ' + f(l[1], 0) + '+ BELLGRAM' : 'No BELLGRAM needed'}</small></div><div>${f(l[2], 0)} BELL/day</div></div>`).join('');
+  else if (!(tc && !d.wallet && $('werr').textContent)) $('werr').textContent = '';$('lvList').innerHTML = LV.map((l, i) => `<div class="lvr${i === lv ? ' cur' : ''}"><div><b>${i} · ${l[0]}</b><small>${i ? 'Hold ' + f(l[1], 0) + '+ BELLGRAM' : 'No BELLGRAM needed'}</small></div><div>${f(l[2], 0)} BELL/day</div></div>`).join('');
   const w = d.withdraw, need = [];
   if (d.balance < w.minBalance) need.push(f(w.minBalance, 0) + ' BELL in your app balance');
   if (d.walletBalance < w.minWallet) need.push(f(w.minWallet, 0) + ' BELLGRAM in your wallet');
@@ -246,13 +267,12 @@ function set(d) {
   $('withdrawBtn').disabled = true;
   draw();
 }
-function showBal(v) { $('bal').textContent = $('bal2').textContent = f(v, 4); }
+function showBal(v) { $('bal').textContent =$('bal2').textContent = f(v, 4); }
 
 function draw() {
   if (!S) return;
   const now = adj(), a = pend(), left = Math.max(0, S.endsAt - now);
-  $('mined').textContent = f(a, 4);
-  $('claim').disabled = busy || a < 0.01;
+  $('mined').textContent = f(a, 4);$('claim').disabled = busy || a < 0.01;
   const t = Math.floor(left / 1000), p2 = n => String(n).padStart(2, '0');
   $('left').textContent = `${p2(Math.floor(t / 3600))}:${p2(Math.floor(t % 3600 / 60))}:${p2(t % 60)}`;
   $('runtxt').textContent = left > 0 ? 'Running' : 'Paused · claim to restart';
@@ -296,10 +316,16 @@ $('loginBtn').onclick = () => act('daily-login', (from, d) => {
   const got = d.balance - from;
   $('loginMsg').textContent = got > 0 ? `Daily bonus claimed: ${f(got, 0)} BELL` : '';
   setTimeout(() => $('loginMsg').textContent = '', 2500);
-});
-$('inv').onclick = () => {
+});$('inv').onclick = () => {
   if (tg) tg.openTelegramLink('https://t.me/share/url?url=' + encodeURIComponent(S.link) + '&text=' + encodeURIComponent('Ring the bell with me on BELLGRAM 🔔'));
-  else { try { navigator.clipboard.writeText(S.link); $('inv').textContent = 'Link copied'; } catch (e) {} }
+  else { try { navigator.clipboard.writeText(S.link); toast('Link copied to clipboard!'); } catch (e) {} }
+};
+$('copyBtn').onclick = () => {
+  navigator.clipboard.writeText(S.link).then(() => {
+    toast('Link copied successfully!');
+  }).catch(() => {
+    toast('Failed to copy link.');
+  });
 };
 function go(v) {
   document.querySelectorAll('nav button,.view').forEach(x => x.classList.remove('on'));
@@ -332,22 +358,6 @@ async function initTC() {
   if (tc || !IN_TG) return;
   if (!window.TON_CONNECT_UI) { $('werr').textContent = 'Wallet library failed to load. Reload the app.'; return; }
   try {
-    const retUrl = (S.link && S.link.startswith('https://t.me/')) ? S.link.split('?')[0] : undefined;
+    const retUrl = (S.link && S.link.startsWith('https://t.me/')) ? S.link.split('?')[0] : undefined;
     tc = new TON_CONNECT_UI.TonConnectUI({
-      manifestUrl: new URL('tonconnect-manifest.json', document.baseURI).href,
-      buttonRootId: 'tcbtn',
-      uiPreferences: {theme: 'DARK'},
-      actionsConfiguration: retUrl ? {twaReturnUrl: retUrl} : undefined
-    });
-    await refreshProof();
-    try { await tc.connectionRestored; } catch (e) {}
-    tc.onStatusChange(onWallet);
-    setInterval(() => { if (!tc.connected) refreshProof(); }, 480000);
-  } catch (e) { $('werr').textContent = 'Wallet connection is unavailable. Check that tonconnect-manifest.json is deployed.'; console.error(e); }
-}
-
-api('me').then(d => { set(d); initTC(); }).catch(e => { toast(errText(e)); $('who').textContent = 'Offline'; });
-setInterval(draw, 250);
-</script>
-</body>
-</html>
+      manifestUrl: new URL('ton
