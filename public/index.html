@@ -5,142 +5,230 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>Bell Coin</title>
 <script src="https://telegram.org/js/telegram-web-app.js"></script>
-<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,800&family=Sora:wght@400;600&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@tonconnect/ui@2/dist/tonconnect-ui.min.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Sora:wght@400;600&display=swap" rel="stylesheet">
 <style>
-:root{--bg:#0c1f24;--panel:#122c30;--line:#21474b;--brass:#e3a93c;--cream:#f3ead7;--verd:#4fc3a8;--mute:#86a39f}
+:root{--bg:#04100b;--pn:#08241a;--bd:#14503a;--g:#2ee59d;--g2:#12b57a;--mint:#9fffd2;--tx:#e9fff4;--mu:#7fb59d;--lime:#d7f542;--gold:#f0b84a}
 *{box-sizing:border-box;margin:0}
 html,body{height:100%}
-body{background:var(--bg);color:var(--cream);font:15px/1.4 Sora,system-ui,sans-serif;display:flex;flex-direction:column;padding-top:env(safe-area-inset-top,0)}
-main{flex:1;overflow:auto;padding:16px 16px 8px;max-width:480px;width:100%;margin:0 auto}
-h1,.big{font-family:Fraunces,Georgia,serif}
-.top{display:flex;justify-content:space-between;align-items:center;margin-bottom:14px}
-.top b{font:800 22px Fraunces,serif;color:var(--brass)}
-.chip{border:1px solid var(--line);border-radius:99px;padding:4px 12px;color:var(--mute);font-size:13px}
-.card{background:var(--panel);border:1px solid var(--line);border-radius:18px;padding:16px;margin-bottom:12px}
-.hero{text-align:center;padding:22px 16px 18px}
-.bellwrap{position:relative;width:200px;height:200px;margin:0 auto 8px}
-.bellwrap svg{position:absolute;inset:0;width:100%;height:100%}
-.swing{transform-origin:50px 14px}
-.ring .swing{animation:ring 1.2s ease-out}
-@keyframes ring{15%{transform:rotate(18deg)}35%{transform:rotate(-14deg)}55%{transform:rotate(9deg)}75%{transform:rotate(-4deg)}}
-@media(prefers-reduced-motion:reduce){.ring .swing{animation:none}}
-.mined{font:800 34px Fraunces,serif;color:var(--verd)}
-.sub{color:var(--mute);font-size:13px}
+body{background:radial-gradient(500px 300px at 50% 0,rgba(46,229,157,.14),transparent 70%),var(--bg);color:var(--tx);font:15px/1.4 Sora,system-ui,sans-serif;display:flex;flex-direction:column;padding-top:env(safe-area-inset-top,0)}
+main{flex:1;overflow:auto;padding:12px 14px 10px;max-width:480px;width:100%;margin:0 auto}
+small{color:var(--mu);font-size:12.5px}
+.hd{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
+.logo{display:flex;align-items:center;gap:8px;font:800 22px Fraunces,serif;color:var(--g)}
+.logo svg{width:26px;height:26px}
+.prof{display:flex;align-items:center;gap:8px;background:var(--pn);border:1px solid var(--bd);border-radius:99px;padding:4px 14px 4px 4px}
+.av{width:32px;height:32px;border-radius:50%;background:linear-gradient(150deg,var(--g),var(--g2));color:#03150d;display:grid;place-items:center;font:800 15px Fraunces,serif}
+.prof b{display:block;font-size:13px;line-height:1.1}.prof small{font-size:11px}
+.banner{position:relative;height:150px;border-radius:20px;overflow:hidden;border:1px solid var(--bd);margin-bottom:12px}
+.banner svg{position:absolute;inset:0;width:100%;height:100%}
+.bt{position:absolute;left:16px;bottom:14px}
+.bt h1{font:800 26px Fraunces,serif;text-shadow:0 2px 12px #000}
+.bt p{font-size:12px;color:var(--mint)}
+.card{background:linear-gradient(180deg,rgba(255,255,255,.04),rgba(255,255,255,.015)),var(--pn);border:1px solid var(--bd);border-radius:20px;padding:14px 16px;margin-bottom:12px}
+.row{display:flex;align-items:center;gap:12px;cursor:pointer}
+.row>div:nth-child(2){flex:1}
+.ico{flex:none;width:42px;height:42px;border-radius:12px;background:rgba(46,229,157,.1);border:1px solid var(--bd);display:grid;place-items:center}
+.ico svg,.t svg{width:22px;height:22px;stroke:var(--g);fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.chev{width:20px;height:20px;stroke:var(--tx);fill:none;stroke-width:2;stroke-linecap:round}
+.bn{font:800 26px Fraunces,serif}.bn em,.mn em{font-style:normal;font-size:.62em;color:var(--g)}
+.mine{position:relative;overflow:hidden;border-color:#1c6b4d}
+.art{position:absolute;right:-12px;top:6px;width:190px;height:190px;opacity:.95;pointer-events:none}
+.mh{position:relative;display:flex;align-items:center;gap:12px}
+.mh>div:nth-child(2){flex:1}
+.run{display:flex;align-items:center;gap:6px;color:var(--g)}
+.run i{width:7px;height:7px;border-radius:50%;background:var(--g);box-shadow:0 0 8px var(--g)}
+.boost{border:1px solid #6b5a1c;background:rgba(240,184,74,.12);color:var(--gold);border-radius:99px;padding:3px 10px;font-weight:600;font-size:13px;z-index:1}
+.mn{position:relative;font:800 38px Fraunces,serif;color:var(--mint);margin:14px 0 2px;text-shadow:0 0 24px rgba(46,229,157,.45)}
+.pz{position:relative;display:block}
+.sess{position:relative;height:5px;background:rgba(255,255,255,.08);border-radius:5px;margin:10px 0 0;width:58%;overflow:hidden}
+.sess i{display:block;height:100%;background:var(--g);width:100%}
 button{font:600 16px Sora,sans-serif;border:0;border-radius:14px;padding:14px;width:100%;cursor:pointer}
-.go{background:var(--brass);color:#2a1c05;margin-top:14px}
-.go:disabled{background:var(--line);color:var(--mute);cursor:not-allowed}
-button:focus-visible{outline:3px solid var(--verd);outline-offset:2px}
-.bal{font:800 30px Fraunces,serif}
-.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:12px}
-.stats .card{margin:0;padding:12px;text-align:center}
-.stats b{display:block;font-size:17px}
-.bar{height:8px;background:var(--line);border-radius:9px;overflow:hidden;margin:10px 0 6px}
-.bar i{display:block;height:100%;background:var(--brass);width:0}
+.go{position:relative;margin-top:16px;background:linear-gradient(180deg,#46f0ae,var(--g2));color:#03150d;box-shadow:0 6px 20px rgba(46,229,157,.28)}
+.go:active{transform:translateY(1px)}
+.go:disabled{background:rgba(255,255,255,.07);color:var(--mu);box-shadow:none;cursor:not-allowed}
+button:focus-visible{outline:3px solid var(--lime);outline-offset:2px}
+.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:12px}
+.t{background:var(--pn);border:1px solid var(--bd);border-radius:16px;padding:10px 6px;text-align:center}
+.t svg{width:18px;height:18px;margin-bottom:2px}
+.t small{display:block;font-size:11px}.t b{display:block;font-size:15px;color:var(--mint)}.t span{font-size:10.5px;color:var(--mu)}
+.lv{display:flex;align-items:center;gap:14px}
+.lv>div:nth-child(2){flex:1}
+.hex{flex:none;width:50px;height:56px;clip-path:polygon(50% 0,100% 25%,100% 75%,50% 100%,0 75%,0 25%);background:linear-gradient(160deg,var(--lime),var(--g));display:grid;place-items:center;color:#03150d;font:800 22px Fraunces,serif}
+.lv .hd2{display:flex;justify-content:space-between;font-weight:600;font-size:14px}.lv .hd2 span{color:var(--mu);font-weight:400;font-size:12.5px}
+.bar{height:9px;background:rgba(255,255,255,.08);border-radius:9px;overflow:hidden;margin:8px 0 6px}
+.bar i{display:block;height:100%;background:linear-gradient(90deg,var(--g2),var(--lime));width:0;transition:width .6s}
+.soon{display:flex;align-items:center;gap:12px;opacity:.85}
+.soon>div:nth-child(2){flex:1}.soon em{font-style:normal;font-size:12px;color:var(--lime);border:1px solid #5d6e1d;border-radius:99px;padding:2px 10px}
 .view{display:none}.view.on{display:block}
-nav{display:flex;background:var(--panel);border-top:1px solid var(--line);padding-bottom:env(safe-area-inset-bottom,0)}
-nav button{background:none;color:var(--mute);border-radius:0;padding:12px 4px;font-size:13px}
-nav button.on{color:var(--brass)}
-.link{word-break:break-all;background:var(--bg);border-radius:10px;padding:10px;color:var(--mute);font-size:12px;margin:10px 0}
+h2{font:800 22px Fraunces,serif;margin-bottom:6px}
+.link{word-break:break-all;background:rgba(0,0,0,.3);border-radius:10px;padding:10px;color:var(--mu);font-size:12px;margin:12px 0}
+#tcbtn{margin:14px 0 4px;display:flex;justify-content:center}
+.addr{font-size:13px;color:var(--g);text-align:center;word-break:break-all}
+.coin{position:absolute;left:78%;top:40%;width:13px;height:13px;border-radius:50%;background:radial-gradient(circle at 35% 30%,#fff3c4,var(--gold) 60%,#a86f12);animation:fly .9s ease-out forwards;pointer-events:none;z-index:2}
+@keyframes fly{to{transform:translate(var(--x),var(--y)) scale(.4);opacity:0}}
+.fl{animation:float 4s ease-in-out infinite}@keyframes float{50%{transform:translateY(-6px)}}
+.swing{transform-origin:50px 14px}.ring .swing{animation:ring 1.2s ease-out}
+@keyframes ring{15%{transform:rotate(18deg)}35%{transform:rotate(-14deg)}55%{transform:rotate(9deg)}75%{transform:rotate(-4deg)}}
+@media(prefers-reduced-motion:reduce){*{animation:none!important}}
+nav{display:flex;gap:6px;padding:8px 12px calc(8px + env(safe-area-inset-bottom,0));background:rgba(4,16,11,.94);border-top:1px solid var(--bd)}
+nav button{flex:1;background:none;color:var(--mu);padding:8px 4px;font-size:12px;border-radius:14px;display:flex;flex-direction:column;align-items:center;gap:3px}
+nav svg{width:22px;height:22px;stroke:currentColor;fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+nav button.on{color:var(--g);background:rgba(46,229,157,.12)}
 </style>
 </head>
 <body>
 <main>
- <div class="top"><b>Bell Coin</b><span class="chip" id="who">Guest</span></div>
+ <header class="hd">
+  <div class="logo"><svg viewBox="0 0 100 100"><path d="M50 12c-3 0-5 2-5 5-14 4-22 16-22 31v14l-7 9v3h68v-3l-7-9V48c0-15-8-27-22-31 0-3-2-5-5-5z" fill="#2ee59d"/><circle cx="50" cy="86" r="8" fill="#2ee59d"/></svg>Bell</div>
+  <div class="prof"><div class="av" id="av">G</div><div><b id="who">Guest</b><small id="lvl">Level 1</small></div></div>
+ </header>
 
  <section class="view on" id="v-home">
-  <div class="card hero">
-   <div class="bellwrap" id="bw">
-    <svg viewBox="0 0 100 100" aria-hidden="true">
-     <circle cx="50" cy="50" r="46" fill="none" stroke="#21474b" stroke-width="3"/>
-     <circle id="ring" cx="50" cy="50" r="46" fill="none" stroke="#4fc3a8" stroke-width="3" stroke-linecap="round" stroke-dasharray="289" stroke-dashoffset="289" transform="rotate(-90 50 50)"/>
-    </svg>
-    <svg viewBox="0 0 100 100" aria-hidden="true">
-     <defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#f6d27a"/><stop offset="1" stop-color="#b9801f"/></linearGradient></defs>
-     <g class="swing" transform="scale(.7) translate(21 14)">
-      <path d="M50 12c-3 0-5 2-5 5-14 4-22 16-22 31v14l-7 9v3h68v-3l-7-9V48c0-15-8-27-22-31 0-3-2-5-5-5z" fill="url(#g)"/>
-      <circle cx="50" cy="84" r="8" fill="#b9801f"/>
-     </g>
-    </svg>
-   </div>
-   <div class="mined" id="mined">+0.0000</div>
-   <div class="sub">BELL ready to collect · resets in <span id="left">24:00:00</span></div>
-   <button class="go" id="claim" disabled>Collect BELL</button>
+  <div class="banner">
+   <svg viewBox="0 0 400 150" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
+    <defs><radialGradient id="pg"><stop offset="0" stop-color="#b6ffe0"/><stop offset=".4" stop-color="#2ee59d" stop-opacity=".75"/><stop offset="1" stop-color="#2ee59d" stop-opacity="0"/></radialGradient>
+    <linearGradient id="sk" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#020b07"/><stop offset="1" stop-color="#0b3d2a"/></linearGradient></defs>
+    <rect width="400" height="150" fill="url(#sk)"/>
+    <g fill="#bfffe5"><circle cx="24" cy="22" r="1.2"/><circle cx="80" cy="48" r="1"/><circle cx="150" cy="18" r="1.4"/><circle cx="210" cy="60" r="1"/><circle cx="372" cy="26" r="1.3"/><circle cx="120" cy="96" r="1"/><circle cx="238" cy="20" r="1"/></g>
+    <circle cx="290" cy="72" r="70" fill="url(#pg)"/>
+    <ellipse cx="290" cy="72" rx="44" ry="56" fill="none" stroke="#9fffd2" stroke-width="3"/>
+    <ellipse cx="290" cy="72" rx="31" ry="42" fill="#03120c" stroke="#2ee59d" stroke-width="2"/>
+    <path d="M318 122l34-7 20 9-16 15h-34z" fill="#0e4a34"/><path d="M228 108l22-5 14 7-12 10h-22z" fill="#0c3d2b"/><path d="M356 52l16-4 10 5-8 8h-16z" fill="#0e4a34"/>
+   </svg>
+   <div class="bt"><h1>Bell Mining</h1><p>Mine · Collect · Level up · Invite</p></div>
   </div>
+
+  <div class="card row" id="toW"><div class="ico"><svg viewBox="0 0 24 24"><ellipse cx="12" cy="6" rx="7" ry="3"/><path d="M5 6v6c0 1.7 3 3 7 3s7-1.3 7-3V6M5 12v6c0 1.7 3 3 7 3s7-1.3 7-3v-6"/></svg></div>
+   <div><small>App Balance</small><div class="bn"><span id="bal">0</span> <em>BELL</em></div></div>
+   <svg class="chev" viewBox="0 0 24 24"><path d="M9 5l7 7-7 7"/></svg></div>
+
+  <div class="card mine" id="mc">
+   <div class="art" id="bw"><svg class="fl" viewBox="0 0 100 100" aria-hidden="true">
+    <defs><radialGradient id="gl"><stop offset="0" stop-color="#2ee59d" stop-opacity=".55"/><stop offset="1" stop-color="#2ee59d" stop-opacity="0"/></radialGradient>
+    <linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ffe29a"/><stop offset=".55" stop-color="#e3a93c"/><stop offset="1" stop-color="#a86f12"/></linearGradient></defs>
+    <circle cx="50" cy="52" r="48" fill="url(#gl)"/>
+    <path d="M22 88l28-6 28 6-12 8H34z" fill="#0e4a34"/>
+    <g class="swing" transform="scale(.62) translate(30 10)">
+     <path d="M50 12c-3 0-5 2-5 5-14 4-22 16-22 31v14l-7 9v3h68v-3l-7-9V48c0-15-8-27-22-31 0-3-2-5-5-5z" fill="url(#g)"/>
+     <path d="M36 30c-6 5-9 12-9 20" stroke="#fff" stroke-opacity=".55" stroke-width="3" fill="none" stroke-linecap="round"/>
+     <circle cx="50" cy="86" r="8" fill="url(#g)"/></g></svg></div>
+   <div class="mh"><div class="ico"><svg viewBox="0 0 24 24"><path d="M12 3l8 4.5v9L12 21l-8-4.5v-9z"/><path d="M12 12l8-4.5M12 12v9M12 12L4 7.5"/></svg></div>
+    <div><b>Mining</b><small class="run"><i></i>Running</small></div><span class="boost">×<span id="bst">1.00</span></span></div>
+   <div class="mn">+<span id="mined">0.0000</span> <em>BELL</em></div>
+   <small class="pz">Mining pauses in <span id="left">24:00:00</span></small>
+   <div class="sess"><i id="sb"></i></div>
+   <button class="go" id="claim" disabled>Claim BELL</button>
+  </div>
+
   <div class="stats">
-   <div class="card"><b id="hr">25</b><span class="sub">per hour</span></div>
-   <div class="card"><b id="dy">600</b><span class="sub">per day</span></div>
-   <div class="card"><b id="lvn">Tin</b><span class="sub">league</span></div>
+   <div class="t"><svg viewBox="0 0 24 24"><path d="M13 2 4 14h7l-1 8 9-12h-7z"/></svg><small>Hourly</small><b id="hr">25</b><span>BELL/h</span></div>
+   <div class="t"><svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="16" rx="3"/><path d="M3 10h18M8 3v4M16 3v4"/></svg><small>Daily</small><b id="dy">~600</b><span>BELL/day</span></div>
+   <div class="t"><svg viewBox="0 0 24 24"><path d="M3 17l6-6 4 4 8-8M15 7h6v6"/></svg><small>Boost</small><b>×<span id="bst2">1.00</span></b><span>multiplier</span></div>
+   <div class="t"><svg viewBox="0 0 24 24"><path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z"/></svg><small>League</small><b id="lvn">Tin</b><span id="lvs">Lv.1</span></div>
   </div>
-  <div class="card"><span class="sub">Balance</span><div class="bal"><span id="bal">0</span> BELL</div>
-   <div class="bar"><i id="lb"></i></div><span class="sub" id="lt"></span></div>
+
+  <div class="card lv"><div class="hex" id="hex">1</div>
+   <div><div class="hd2">Next Level: <span id="nxl">2</span><span id="prog"></span></div>
+   <div class="bar"><i id="lb"></i></div><small id="lt"></small></div></div>
+
+  <div class="card soon"><div class="ico"><svg viewBox="0 0 24 24"><path d="M9 11l3 3 8-8M20 12v7a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h9"/></svg></div>
+   <div><b>Mission center</b><br><small>Daily tasks and rewards</small></div><em>Soon</em></div>
  </section>
 
  <section class="view" id="v-friends">
-  <div class="card"><h1>Invite friends</h1>
-   <p class="sub">You and your friend both get 50 BELL when they join.</p>
+  <div class="card"><h2>Invite friends</h2>
+   <small>You and your friend both get 50 BELL when they join.</small>
    <div class="link" id="lnk"></div>
    <button class="go" id="inv">Share invite link</button></div>
-  <div class="card"><span class="sub">Friends joined</span><div class="bal" id="refs">0</div></div>
+  <div class="card"><small>Friends joined</small><div class="bn" id="refs">0</div></div>
  </section>
 
  <section class="view" id="v-wallet">
-  <div class="card"><h1>Wallet</h1>
-   <div class="bal"><span id="bal2">0</span> BELL</div>
-   <p class="sub" style="margin-top:8px">Withdrawals are not open yet. Keep collecting to grow your balance.</p></div>
+  <div class="card"><small>App Balance</small><div class="bn"><span id="bal2">0</span> <em>BELL</em></div></div>
+  <div class="card"><h2>TON wallet</h2>
+   <small id="wsub">Connect a wallet to link it to your Bell Coin account.</small>
+   <div id="tcbtn"></div><div class="addr" id="addr"></div></div>
+  <div class="card"><small>Withdrawals are not open yet. Linking a wallet does not move any BELL. BELL points are for testing and have no monetary value.</small></div>
  </section>
 </main>
 
 <nav>
- <button class="on" data-v="home">Home</button>
- <button data-v="friends">Friends</button>
- <button data-v="wallet">Wallet</button>
+ <button class="on" data-v="home"><svg viewBox="0 0 24 24"><path d="M3 11l9-8 9 8v9a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/></svg>Home</button>
+ <button data-v="friends"><svg viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c0-3.6 3-6 6.5-6s6.5 2.4 6.5 6"/><circle cx="17" cy="9" r="2.5"/><path d="M17 14c2.5 0 4.5 1.7 4.5 4.5"/></svg>Friends</button>
+ <button data-v="wallet"><svg viewBox="0 0 24 24"><rect x="3" y="6" width="18" height="14" rx="3"/><path d="M3 10h18M16 15h2"/></svg>Wallet</button>
 </nav>
 
 <script>
 const tg = window.Telegram && Telegram.WebApp;
-if (tg) { tg.ready(); tg.expand(); }
+if (tg) { tg.ready(); tg.expand(); try { tg.setHeaderColor('#04100b'); tg.setBackgroundColor('#04100b'); } catch (e) {} }
 const $ = id => document.getElementById(id);
 const DAY = 864e5, LV = [['Tin',0],['Copper',100],['Brass',1000],['Silver',5000],['Gold',25000]];
 const acc = (s, n) => s.rate * Math.min(n - s.started, DAY) / 36e5;
 const f = (n, d) => n.toLocaleString('en', {minimumFractionDigits: d, maximumFractionDigits: d});
-let S, off = 0;
+let S, off = 0, anim = false, tc;
 
-// Demo mode: when the page is opened without the backend, state lives in localStorage.
-function demo(p) {
+function demo(p, b) {
   let d; try { d = JSON.parse(localStorage.bc); } catch (e) {}
-  d = d || {balance: 0, rate: 25, started: Date.now(), refs: 0, link: 'https://t.me/YourBot/app?startapp=r1', name: 'Guest'};
+  d = d || {balance: 0, rate: 25, started: Date.now(), refs: 0, wallet: null, link: 'https://t.me/YourBot/app?startapp=r1', name: 'Guest'};
   if (p === 'claim') { d.balance += acc(d, Date.now()); d.started = Date.now(); }
+  if (p === 'wallet') d.wallet = (b && b.address) || null;
   try { localStorage.bc = JSON.stringify(d); } catch (e) {}
   return Object.assign({}, d, {now: Date.now()});
 }
-async function api(p, m) {
+async function api(p, m, b) {
   try {
-    const r = await fetch('/api/' + p, {method: m || 'GET', headers: {'x-init': tg ? tg.initData : ''}});
+    const r = await fetch('/api/' + p, {method: m || 'GET', body: b ? JSON.stringify(b) : undefined,
+      headers: {'x-init': tg ? tg.initData : '', 'content-type': 'application/json'}});
     if (!r.ok) throw 0;
     return await r.json();
-  } catch (e) { return demo(p); }
+  } catch (e) { return demo(p, b); }
 }
-function set(d) { S = d; off = d.now - Date.now(); $('who').textContent = d.name; $('hr').textContent = d.rate;
-  $('dy').textContent = '~' + d.rate * 24; $('lnk').textContent = d.link; $('refs').textContent = d.refs; draw(); }
+const friendly = r => { try { return TON_CONNECT_UI.toUserFriendlyAddress(r); } catch (e) { return r; } };
+
+function set(d) {
+  S = d; off = d.now - Date.now();
+  $('who').textContent = d.name; $('av').textContent = (d.name || 'G')[0].toUpperCase();
+  $('hr').textContent = d.rate; $('dy').textContent = '~' + d.rate * 24;
+  $('lnk').textContent = d.link; $('refs').textContent = d.refs;
+  if (d.wallet) { const a = friendly(d.wallet); $('addr').textContent = a.slice(0, 6) + '…' + a.slice(-6); $('wsub').textContent = 'Wallet linked to your account.'; }
+  else { $('addr').textContent = ''; $('wsub').textContent = 'Connect a wallet to link it to your Bell Coin account.'; }
+  draw(); initTC();
+}
+function showBal(v) { $('bal').textContent = $('bal2').textContent = f(v, 4); }
 
 function draw() {
   if (!S) return;
   const now = Date.now() + off, a = acc(S, now), left = Math.max(0, DAY - (now - S.started));
-  $('mined').textContent = '+' + f(a, 4);
+  $('mined').textContent = f(a, 4);
   $('claim').disabled = a < 0.01;
   const t = Math.floor(left / 1000), p2 = n => String(n).padStart(2, '0');
   $('left').textContent = `${p2(Math.floor(t / 3600))}:${p2(Math.floor(t % 3600 / 60))}:${p2(t % 60)}`;
-  $('ring').style.strokeDashoffset = 289 * (left / DAY);
-  $('bal').textContent = $('bal2').textContent = f(S.balance, 2);
+  $('sb').style.width = (left / DAY * 100) + '%';
+  if (!anim) showBal(S.balance);
   let i = LV.length - 1; while (LV[i][1] > S.balance) i--;
-  $('lvn').textContent = LV[i][0];
+  $('lvn').textContent = LV[i][0]; $('lvs').textContent = 'Lv.' + (i + 1); $('hex').textContent = i + 1; $('lvl').textContent = 'Level ' + (i + 1);
   const nx = LV[i + 1];
+  $('nxl').textContent = nx ? i + 2 : 'Max';
+  $('prog').textContent = nx ? `${f(S.balance, 0)} / ${f(nx[1], 0)} BELL` : '';
   $('lb').style.width = (nx ? (S.balance - LV[i][1]) / (nx[1] - LV[i][1]) * 100 : 100) + '%';
   $('lt').textContent = nx ? `Hold ${f(nx[1], 0)} BELL to reach ${nx[0]}` : 'Top league reached';
 }
-
+function burst() {
+  const w = $('mc');
+  for (let k = 0; k < 12; k++) {
+    const c = document.createElement('i'), ang = Math.random() * 6.28, r = 60 + Math.random() * 60;
+    c.className = 'coin'; c.style.setProperty('--x', Math.cos(ang) * r + 'px'); c.style.setProperty('--y', Math.sin(ang) * r - 20 + 'px');
+    w.appendChild(c); setTimeout(() => c.remove(), 950);
+  }
+}
 $('claim').onclick = async () => {
-  set(await api('claim', 'POST'));
+  const from = S.balance, d = await api('claim', 'POST');
+  anim = true; set(d); burst();
+  const t0 = performance.now(); (function step(n) {
+    const k = Math.min(1, (n - t0) / 700); showBal(from + (d.balance - from) * k);
+    if (k < 1) requestAnimationFrame(step); else anim = false;
+  })(t0);
   const w = $('bw'); w.classList.remove('ring'); void w.offsetWidth; w.classList.add('ring');
   if (tg && tg.HapticFeedback) tg.HapticFeedback.notificationOccurred('success');
 };
@@ -148,11 +236,24 @@ $('inv').onclick = () => {
   if (tg) tg.openTelegramLink('https://t.me/share/url?url=' + encodeURIComponent(S.link) + '&text=' + encodeURIComponent('Ring the bell with me on Bell Coin 🔔'));
   else { try { navigator.clipboard.writeText(S.link); $('inv').textContent = 'Link copied'; } catch (e) {} }
 };
-document.querySelectorAll('nav button').forEach(b => b.onclick = () => {
+function go(v) {
   document.querySelectorAll('nav button,.view').forEach(x => x.classList.remove('on'));
-  b.classList.add('on'); $('v-' + b.dataset.v).classList.add('on');
-});
+  document.querySelector(`nav [data-v=${v}]`).classList.add('on'); $('v-' + v).classList.add('on');
+}
+document.querySelectorAll('nav button').forEach(b => b.onclick = () => go(b.dataset.v));
+$('toW').onclick = () => go('wallet');
 
+function initTC() {
+  if (tc || !window.TON_CONNECT_UI) return;
+  try {
+    tc = new TON_CONNECT_UI.TonConnectUI({manifestUrl: location.origin + '/tonconnect-manifest.json', buttonRootId: 'tcbtn',
+      uiPreferences: {theme: 'DARK'}, actionsConfiguration: {twaReturnUrl: S.link.split('?')[0]}});
+    tc.onStatusChange(async w => {
+      const a = w && w.account ? w.account.address : '';
+      if ((S.wallet || '') !== a) set(await api('wallet', 'POST', {address: a}));
+    });
+  } catch (e) {}
+}
 api('me').then(set);
 setInterval(draw, 250);
 </script>
