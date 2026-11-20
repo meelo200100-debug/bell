@@ -9,6 +9,7 @@ function decodeHtml(str) {
   const tags = /<\/?[a-z][^>]*>/gi;
   return String(str || '')
     .replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, '$1')
+    .replace(/<tg-emoji\b[^>]*emoji-id=["'](\d+)["'][^>]*>([\s\S]*?)<\/tg-emoji>/gi, (_, id, glyph) => `{{TG_EMOJI:${id}|${String(glyph).replace(/<[^>]*>/g, '')}}}`)
     // Remove entire <a>...</a> tags that link to Telegram, X/Twitter, or external channel/source URLs
     .replace(/<a\b[^>]*href=["']https?:\/\/[^"']*["'][^>]*>[\s\S]*?<\/a>/gi, ' ')
     .replace(/<br\s*\/?>/gi, '\n')
@@ -96,6 +97,7 @@ function createCore({ db, bot, cfg, fetchFn = fetch, sleep = ms => new Promise(r
 
     // Only the first run writes the default template; a template saved from the panel survives restarts.
     await run("INSERT OR IGNORE INTO settings(k, v) VALUES('template', ?)", [L.DEFAULT_TEMPLATE]);
+    await run("INSERT OR IGNORE INTO settings(k, v) VALUES('buttons', ?)", [JSON.stringify(L.DEFAULT_BUTTONS)]);
 
     for (const ch of L.DEFAULT_CHANNELS) await run("INSERT OR IGNORE INTO sources(type, value, active) VALUES('tg_channel', ?, 1)", [ch]);
     for (const feed of L.DEFAULT_RSS_FEEDS) await run("INSERT OR IGNORE INTO sources(type, value, active) VALUES('rss', ?, 1)", [feed]);
@@ -116,6 +118,13 @@ function createCore({ db, bot, cfg, fetchFn = fetch, sleep = ms => new Promise(r
   async function getTemplate() {
     const r = first(await run("SELECT v FROM settings WHERE k='template'"));
     return (r && r.v) || L.DEFAULT_TEMPLATE;
+  }
+  async function getButtons() {
+    const r = first(await run("SELECT v FROM settings WHERE k='buttons'"));
+    try {
+      const buttons = JSON.parse((r && r.v) || '[]');
+      return Array.isArray(buttons) && buttons.length === 4 ? buttons : L.DEFAULT_BUTTONS;
+    } catch (_) { return L.DEFAULT_BUTTONS; }
   }
   async function setEnabledState(val) {
     isRunning = !!val;
@@ -240,12 +249,13 @@ function createCore({ db, bot, cfg, fetchFn = fetch, sleep = ms => new Promise(r
   }
 
   // ---------- sending ----------
-  async function sendSafe(chatId, text) {
+  async function sendSafe(chatId, text, buttons = []) {
     let plain = false, waited = false;
     for (let i = 0; i < 3; i++) {
       try {
-        await bot.sendMessage(chatId, plain ? text.replace(/\{\{TG_EMOJI:\d+\|([^}]+)\}\}/g, '$1').replace(/<[^>]*>/g, '') : telegramHtml(text),
-          plain ? { disable_web_page_preview: true } : { parse_mode: 'HTML', disable_web_page_preview: true });
+        const options = plain ? { disable_web_page_preview: true } : { parse_mode: 'HTML', disable_web_page_preview: true };
+        if (buttons.length === 4) options.reply_markup = { inline_keyboard: [buttons] };
+        await bot.sendMessage(chatId, plain ? text.replace(/\{\{TG_EMOJI:\d+\|([^}]+)\}\}/g, '$1').replace(/<[^>]*>/g, '') : telegramHtml(text), options);
         return { ok: true };
       } catch (e) {
         const { code, desc, retry } = tgError(e);
@@ -258,10 +268,10 @@ function createCore({ db, bot, cfg, fetchFn = fetch, sleep = ms => new Promise(r
   }
 
   // done=true means the item can be recorded as handled (sent somewhere, or rejected for good everywhere).
-  async function publish(text, targets) {
+  async function publish(text, targets, buttons = []) {
     let ok = 0, permanent = 0, lastErr = '';
     for (const chatId of targets) {
-      const r = await sendSafe(chatId, text);
+      const r = await sendSafe(chatId, text, buttons);
       if (r.ok) ok++;
       else { lastErr = `${chatId}: ${r.error}`; console.error('Send failed', lastErr); if (r.permanent) permanent++; }
     }
@@ -277,7 +287,7 @@ function createCore({ db, bot, cfg, fetchFn = fetch, sleep = ms => new Promise(r
     { id: 'the-open-network', symbol: 'TON', name: 'تونكوين' },
     { id: 'ripple', symbol: 'XRP', name: 'ريبل' },
   ];
-  async function fetchCryptoMarketAlerts(template, targets) {
+  async function fetchCryptoMarketAlerts(template, targets, buttons) {
     const ids = COINS.map(c => c.id).join(',');
     const res = await fetchFn(`https://api.coingecko.com/api/v3/simple/price?ids=${ids}&vs_currencies=usd&include_24hr_change=true`,
       { signal: AbortSignal.timeout(10000) });
@@ -295,7 +305,7 @@ function createCore({ db, bot, cfg, fetchFn = fetch, sleep = ms => new Promise(r
       const h = L.newsHash(`price:${item.symbol}:${item.change24h >= 0 ? 'up' : 'down'}:${bucket}`);
       if (first(await run('SELECT 1 FROM posted_items WHERE hash=?', [h]))) continue;
       if (published > 0 && postDelayMs > 0) await sleep(postDelayMs);
-      const r = await publish(L.formatPriceAlert(item, template), targets);
+      const r = await publish(L.formatPriceAlert(item, template), targets, buttons);
       if (!r.done) break;
       await run('INSERT OR IGNORE INTO posted_items(hash, source, title, posted_at) VALUES(?, ?, ?, ?)', [h, 'market', item.symbol, now()]);
       if (r.ok) published++;
@@ -325,6 +335,7 @@ function createCore({ db, bot, cfg, fetchFn = fetch, sleep = ms => new Promise(r
       const targets = await getActiveTargets();
       if (!targets.length) return { skipped: false, published: 0, reason: 'no_targets' };
       const template = await getTemplate();
+      const buttons = await getButtons();
 
       const srcRows = (await run('SELECT type, value FROM sources WHERE active=1')).rows || [];
       const collected = (await mapLimit(srcRows, 6, fetchSource)).flat();
@@ -334,7 +345,9 @@ function createCore({ db, bot, cfg, fetchFn = fetch, sleep = ms => new Promise(r
       if (cfg.adFilter) items = items.filter(i => !L.isPromo(i.text, cfg.adExtra));
       items = items.map(i => ({ ...i, ts: i.ts === null ? now() : i.ts })).sort((a, b) => b.ts - a.ts);
 
-      const picked = [], inBatch = new Set();
+      const picked = [], inBatch = new Set(), pickedTexts = [];
+      const postedRows = (await run('SELECT title FROM posted_items WHERE posted_at >= ?', [now() - 30 * DAY])).rows || [];
+      const postedTexts = postedRows.map(row => String(row.title || '')).filter(Boolean);
       for (const it of items) {
         if (picked.length >= cfg.maxPerCycle) break;
         const h = L.newsHash(it.text);
@@ -343,7 +356,9 @@ function createCore({ db, bot, cfg, fetchFn = fetch, sleep = ms => new Promise(r
         if (first(await run('SELECT 1 FROM posted_items WHERE hash=?', [h]))) continue;
         const failed = first(await run('SELECT retry_after FROM failed_items WHERE hash=?', [h]));
         if (failed && Number(failed.retry_after) > now()) continue;
+        if (postedTexts.some(previous => L.areSimilarNews(it.text, previous)) || pickedTexts.some(previous => L.areSimilarNews(it.text, previous))) continue;
         picked.push({ ...it, h });
+        pickedTexts.push(it.text);
       }
       picked.reverse(); // newest last, so the channel reads in order
 
@@ -363,13 +378,13 @@ function createCore({ db, bot, cfg, fetchFn = fetch, sleep = ms => new Promise(r
           continue;
         }
         await run('DELETE FROM failed_items WHERE hash=?', [it.h]);
-        const r = await publish(L.formatCleanBilingualPost({ bodyAr: ar, bodyEn: '', template, sourceName: it.sourceTitle || it.source || '', bilingual: false }), targets);
+        const r = await publish(L.formatCleanBilingualPost({ bodyAr: ar, bodyEn: '', template, sourceName: it.sourceTitle || it.source || '', bilingual: false }), targets, buttons);
         if (!r.done) { lastError = `Telegram unreachable: ${r.error}`; break; }
         await run('INSERT OR IGNORE INTO posted_items(hash, source, title, posted_at) VALUES(?, ?, ?, ?)', [it.h, it.source || 'feed', it.text.slice(0, 120), now()]);
         if (r.ok) published++; else lastError = `Could not post to any channel: ${r.error}`;
       }
 
-      try { published += await fetchCryptoMarketAlerts(template, targets); }
+      try { published += await fetchCryptoMarketAlerts(template, targets, buttons); }
       catch (e) { console.warn('Market alerts failed:', e.message); }
 
       await run('DELETE FROM posted_items WHERE posted_at < ?', [now() - 30 * DAY]);
@@ -402,16 +417,17 @@ function createCore({ db, bot, cfg, fetchFn = fetch, sleep = ms => new Promise(r
 
   const handlers = {
     state: async (req, res) => {
-      const [sources, targets, posted, template] = await Promise.all([
+      const [sources, targets, posted, template, buttons] = await Promise.all([
         run('SELECT id, type, value, active FROM sources ORDER BY id ASC'),
         run('SELECT id, chat_id, active FROM targets ORDER BY id ASC'),
         run('SELECT COUNT(*) AS c FROM posted_items'),
         getTemplate(),
+        getButtons(),
       ]);
       res.json({
         running: isRunning, busy: cycleRunning, lastCycleAt, lastError,
         publishedCount: Number((first(posted) || {}).c || 0), template,
-        sources: sources.rows || [], targets: targets.rows || [], prices: latestPrices,
+        sources: sources.rows || [], targets: targets.rows || [], prices: latestPrices, buttons,
         xEnabled: cfg.nitterHosts.length > 0, translateEnabled: true, adFilter: cfg.adFilter,
       });
     },
@@ -422,6 +438,19 @@ function createCore({ db, bot, cfg, fetchFn = fetch, sleep = ms => new Promise(r
       if (tpl.length > 3000) return res.status(400).json({ error: 'template_too_long' });
       await run("INSERT INTO settings(k, v) VALUES('template', ?) ON CONFLICT(k) DO UPDATE SET v=excluded.v", [tpl]);
       res.json({ ok: true, template: tpl });
+    },
+    buttons: async (req, res) => {
+      const raw = req.body && req.body.buttons;
+      if (!Array.isArray(raw) || raw.length !== 4) return res.status(400).json({ error: 'buttons_must_be_four' });
+      const buttons = raw.map(item => ({
+        text: String(item && item.text || '').trim(),
+        url: String(item && item.url || '').trim(),
+      }));
+      if (buttons.some(b => !b.text || b.text.length > 40 || b.url.length > 2048 || !L.isSafeRemoteUrl(b.url))) {
+        return res.status(400).json({ error: 'invalid_button' });
+      }
+      await run("INSERT INTO settings(k, v) VALUES('buttons', ?) ON CONFLICT(k) DO UPDATE SET v=excluded.v", [JSON.stringify(buttons)]);
+      res.json({ ok: true, buttons });
     },
     sources: async (req, res) => {
       const type = String((req.body && req.body.type) || 'tg_channel');

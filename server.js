@@ -63,6 +63,7 @@ app.use('/api', core.adminAuth);
 app.get('/api/state', ah(core.handlers.state));
 app.post('/api/toggle', ah(core.handlers.toggle));
 app.post('/api/template', ah(core.handlers.template));
+app.post('/api/buttons', ah(core.handlers.buttons));
 app.post('/api/sources', ah(core.handlers.sources));
 app.delete('/api/sources/:id', ah(core.handlers.deleteSource));
 app.post('/api/targets', ah(core.handlers.targets));

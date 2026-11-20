@@ -44,6 +44,13 @@ const DEFAULT_TEMPLATE = [
   '[👻 ADMIN](https://t.me/g_h_o_s_t_14)|[👿  𝐆𝐇𝐎𝐒𝐓](https://t.me/CRGhosts21) | [✈️Alkatiba21](https://t.me/Alkatiba21) | [💬Group](https://t.me/HETANCR22)| [🗯 Referral](https://t.me/REFERRA21)| [🎥 youtube](https://www.youtube.com/@GHOSTS21-CG)|[💬Twitter](https://x.com/Ghost_818)|[📸Instagram](https://www.instagram.com/mr1997art/)|[📨 Share](https://t.me/share/url?url=https://t.me/Alkatiba21&text=Hey%20You)',
 ].join('\n');
 
+const DEFAULT_BUTTONS = [
+  { text: 'القناة الرئيسية', url: 'https://t.me/Alkatiba21' },
+  { text: 'Group التواصل', url: 'https://t.me/HETANCR22' },
+  { text: 'كلم الـ Admin', url: 'https://t.me/g_h_o_s_t_14' },
+  { text: 'مشاركة الخبر', url: 'https://t.me/share/url?url=https%3A%2F%2Ft.me%2FAlkatiba21' },
+];
+
 const cleanSlug = s => String(s || '').trim()
   .replace(/^https?:\/\/(t\.me|telegram\.me)\/(s\/)?/i, '')
   .replace(/^@+/, '').split('/')[0].split('?')[0].trim();
@@ -179,6 +186,70 @@ function newsHash(text) {
   return crypto.createHash('sha256').update(norm).digest('hex');
 }
 
+const NEWS_STOPWORDS = new Set([
+  'the', 'and', 'for', 'with', 'from', 'that', 'this', 'after', 'before', 'into', 'over', 'under',
+  'على', 'من', 'في', 'إلى', 'عن', 'مع', 'بعد', 'قبل', 'هذا', 'هذه', 'ذلك', 'تلك', 'خلال', 'وسط',
+  'تم', 'قد', 'يتم', 'جديد', 'الجديد', 'news', 'خبر', 'عاجل', 'اليوم', 'الآن',
+]);
+
+const NEWS_SYNONYMS = [
+  [/\b(?:aircraft|airplane|plane|flight)\b|طائرة|طايرة|الطايرة|رحلة جوية/giu, ' aircraft '],
+  [/\b(?:india|indian)\b|الهند|هندي|هندية/giu, ' india '],
+  [/\b(?:missing|disappeared|disappear|lost contact|no contact)\b|اختفاء|اختفت|اختفى|مفقود|فقد الاتصال|انقطاع الاتصال|انقطع الاتصال/giu, ' aviation_event '],
+  [/\b(?:crash|crashed|accident)\b|سقوط|سقط|سقطت|تحطم|تحطمت|حادث طيران/giu, ' aviation_event '],
+  [/\b(?:earthquake|quake)\b|زلزال|هزة أرضية/giu, ' earthquake '],
+  [/\b(?:explosion|blast)\b|انفجار|انفجرت/giu, ' explosion '],
+  [/\b(?:fire|blaze)\b|حريق|اندلاع النيران/giu, ' fire '],
+  [/\b(?:arrested|arrest|detained)\b|اعتقال|اعتقلت|احتجاز|أوقف/giu, ' arrest '],
+  [/\b(?:killed|dead|deaths|died)\b|قتل|قتلى|وفيات|توفي|وفاة/giu, ' deaths '],
+  [/\b(?:election|vote|voting)\b|انتخابات|انتخاب|تصويت/giu, ' election '],
+];
+
+function normalizedNewsTokens(text) {
+  let normalized = String(text || '')
+    .toLowerCase().normalize('NFKC')
+    .replace(/[إأآٱ]/g, 'ا').replace(/ى/g, 'ي').replace(/ؤ/g, 'و').replace(/ئ/g, 'ي')
+    .replace(/[ًٌٍَُِّْـ]/g, '').replace(/[%٪]/g, ' percent ')
+    .replace(/[^\p{L}\p{N}.+-]+/gu, ' ');
+  for (const [rx, replacement] of NEWS_SYNONYMS) normalized = normalized.replace(rx, replacement);
+  return new Set(normalized.split(/\s+/).filter(t => t.length >= 2 && !NEWS_STOPWORDS.has(t)));
+}
+
+function newsSignals(text) {
+  const s = String(text || '').toLowerCase().normalize('NFKC');
+  const assets = [];
+  const assetMap = [
+    ['bitcoin', /\b(?:bitcoin|btc)\b|بيتكوين|بتكوين/iu],
+    ['ethereum', /\b(?:ethereum|eth)\b|ايثيريوم|إيثيريوم|إيثريوم/iu],
+    ['bnb', /\b(?:bnb|binance coin)\b|باينانس\s*كوين/iu],
+    ['solana', /\b(?:solana|sol)\b|سولانا/iu],
+    ['ton', /\b(?:ton|toncoin)\b|تونكوين/iu],
+    ['xrp', /\b(?:xrp|ripple)\b|ريبل/iu],
+  ];
+  for (const [name, rx] of assetMap) if (rx.test(s)) assets.push(name);
+  const direction = /انخفاض|ينخفض|انخفض|هبوط|هبط|تراجع|يتراجع|خسر|خسارة|down|drop|fell|fall|decline|decrease|lower|سقوط/iu.test(s)
+    ? 'down'
+    : /ارتفاع|يرتفع|ارتفع|صعود|صعد|قفز|زيادة|يزيد|ربح|up|rise|rose|rally|increase|higher|surge/iu.test(s) ? 'up' : '';
+  const numbers = [...s.matchAll(/\b\d+(?:[.,]\d+)?\s*[%٪]?|\$\s*\d+(?:[.,]\d+)?/g)]
+    .map(m => m[0].replace(/\s+/g, '').replace('٪', '%').replace(',', '.')).sort();
+  return { assets, direction, numbers };
+}
+
+// Conservative semantic duplicate check for differently worded reports.
+function areSimilarNews(a, b) {
+  const sa = newsSignals(a), sb = newsSignals(b);
+  const sharedAssets = sa.assets.filter(x => sb.assets.includes(x));
+  const sharedNumbers = sa.numbers.filter(x => sb.numbers.includes(x));
+  if (sharedAssets.length && sa.direction && sa.direction === sb.direction && sharedNumbers.length) return true;
+  const ta = normalizedNewsTokens(a), tb = normalizedNewsTokens(b);
+  if (ta.size < 3 || tb.size < 3) return false;
+  const intersection = [...ta].filter(x => tb.has(x)).length;
+  const union = new Set([...ta, ...tb]).size;
+  const jaccard = union ? intersection / union : 0;
+  if (sharedAssets.length && sa.direction && sa.direction === sb.direction && jaccard >= 0.45) return true;
+  return jaccard >= 0.72;
+}
+
 const hasContent = text => /[\p{L}\p{N}]/u.test(stripLinksAndHandles(text));
 
 // Cuts on a word boundary (by code points, so emoji are never split).
@@ -291,8 +362,9 @@ function verifyInitData(init, token, maxAgeSec = 86400, nowSec = Date.now() / 10
 }
 
 module.exports = {
-  DEFAULT_CHANNELS, DEFAULT_RSS_FEEDS, DEFAULT_X_HANDLES, DEFAULT_TEMPLATE, DEFAULT_PROMO,
+  DEFAULT_CHANNELS, DEFAULT_RSS_FEEDS, DEFAULT_X_HANDLES, DEFAULT_TEMPLATE, DEFAULT_BUTTONS, DEFAULT_PROMO,
   cleanChannelName, cleanTargetChannel, cleanXHandle, cleanFeedUrl, isSafeRemoteUrl,
   stripLinksAndHandles, toBoldLines, newsHash, hasContent, truncate, isArabic, isPromo, parseDate,
   applyTemplate, polishArabicTranslation, formatCleanBilingualPost, formatPriceAlert, verifyInitData,
+  normalizedNewsTokens, newsSignals, areSimilarNews,
 };
