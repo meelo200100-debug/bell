@@ -57,7 +57,6 @@ input:focus,select:focus,textarea:focus{border-color:var(--ac)}
 .button-card{display:grid;gap:6px;padding:8px;background:rgba(0,0,0,.18);border:1px solid var(--bd);border-radius:12px}
 .button-card small{color:var(--ac);font-weight:700}
 @media(max-width:620px){.button-config{grid-template-columns:repeat(2,minmax(0,1fr))}}
-.item-actions{display:flex;gap:5px;align-items:center;flex-wrap:wrap}.btn-mini{padding:5px 8px;font-size:11px;border:1px solid var(--bd);background:rgba(255,255,255,.04);color:var(--tx)}.btn-mini.active{color:var(--ac)}.btn-mini.danger{color:#ff9b9b}.item-main{min-width:0;overflow-wrap:anywhere}.item-main span:first-child{display:block}.tag.off{color:var(--warn)}
 </style>
 </head>
 <body>
@@ -87,11 +86,6 @@ input:focus,select:focus,textarea:focus{border-color:var(--ac)}
       </div>
       <button class="btn-sec" id="btnFetch" style="width:100%;margin-top:8px">⚡ جلب ونشر الأخبار والأسعار الآن</button>
       <div class="mini" id="cycleInfo"></div>
-      <div class="mini" id="deliveryInfo"></div>
-    </div>
-    <div class="card">
-      <h2>آخر الأخبار التي حللها الذكاء الاصطناعي</h2>
-      <div class="list" id="analysisList"><small>سيظهر سجل التحليل بعد تفعيل AI ومعالجة الأخبار.</small></div>
     </div>
 
     <div class="card">
@@ -126,7 +120,7 @@ input:focus,select:focus,textarea:focus{border-color:var(--ac)}
         <input id="srcVal" placeholder="@WatcherGuru أو رابط RSS" dir="ltr">
         <button class="btn-add" id="btnAddSrc">إضافة</button>
       </div>
-      <div class="mini" id="xInfo"></div><div class="mini" id="aiInfo"></div>
+      <div class="mini" id="xInfo"></div>
       <div class="list" id="srcList"></div>
     </div>
   </section>
@@ -218,40 +212,23 @@ function render(s) {
     if (document.activeElement !== $('btnUrl' + n)) $('btnUrl' + n).value = b.url || '';
   });
   $('cycleInfo').textContent = s.lastCycleAt ? 'آخر دورة: ' + new Date(s.lastCycleAt).toLocaleString('ar-EG') + (s.busy ? ' (جارية الآن)' : '') : 'لم تُنفَّذ دورة بعد';
-  $('deliveryInfo').textContent = `التسليمات الناجحة: ${Number(s.deliveryStats && s.deliveryStats.sent || 0)} · محاولات معلقة: ${Number(s.deliveryStats && s.deliveryStats.pending || 0)}`;
-  const categoryNames = { breaking: 'عاجل', regulation: 'تنظيمات', listing: 'إدراجات', market: 'السوق', security: 'أمن واختراقات', project: 'مشاريع', other: 'عام' };
-  const priorityNames = { critical: 'حرج', high: 'مرتفع', normal: 'عادي' };
-  $('analysisList').innerHTML = (s.recentAnalysis || []).map(x => `<div class="item"><div class="item-main"><span>${esc(x.title || 'خبر قيد المعالجة')}</span><span class="tag">${esc(categoryNames[x.category] || 'عام')} · أولوية ${esc(priorityNames[x.priority] || 'عادي')}${x.is_promo ? ' · ترويجي' : ''}</span><small>${esc(x.source || '')} · ${x.created_at ? new Date(x.created_at).toLocaleString('ar-EG') : ''}</small></div></div>`).join('') || '<small>لا توجد تحليلات حتى الآن.</small>';
   $('xInfo').textContent = s.xEnabled ? '' : 'مصادر X متوقفة حالياً: تحتاج استضافة Nitter (متغير NITTER_HOSTS).';
   banner(s.lastError ? 'آخر خطأ: ' + s.lastError : '', true);
 
-  $('aiInfo').textContent = s.aiEnabled ? 'الترجمة الذكية بالذكاء الاصطناعي مفعّلة.' : 'الذكاء الاصطناعي غير مربوط بعد: أضف AI_API_KEY في متغيرات الاستضافة لتفعيل الترجمة الذكية.';
   $('srcList').innerHTML = (s.sources || []).map(x =>
-    `<div class="item"><div class="item-main"><span dir="ltr">${esc(x.value)}</span><span class="tag ${x.active ? '' : 'off'}">${esc(x.type)} · ${x.active ? 'نشط' : 'متوقف'}${x.checked_at ? ' · آخر اختبار: ' + new Date(x.checked_at).toLocaleString('ar-EG') : ''}</span></div><div class="item-actions"><button class="btn-mini" data-source-test="${Number(x.id)}">اختبار</button><button class="btn-mini ${x.active ? 'active' : ''}" data-source-toggle="${Number(x.id)}" data-active="${x.active ? 1 : 0}">${x.active ? 'إيقاف' : 'تشغيل'}</button><button class="btn-del" type="button" title="حذف المصدر" aria-label="حذف المصدر" data-source-id="${Number(x.id)}">×</button></div></div>`
+    `<div class="item"><div class="item-main"><span dir="ltr">${esc(x.value)}</span><span class="tag">${esc(x.type)}</span></div><button class="btn-del" type="button" title="حذف المصدر" aria-label="حذف المصدر" data-source-id="${Number(x.id)}">×</button></div>`
   ).join('') || '<small>لا توجد مصادر بعد</small>';
-  $('srcList').querySelectorAll('[data-source-id]').forEach(btn => btn.addEventListener('click', () => {
-    const id = Number(btn.dataset.sourceId);
-    if (Number.isSafeInteger(id) && id > 0 && confirm('هل تريد حذف هذا المصدر نهائياً؟')) act(() => api('/sources/' + id, { _method: 'DELETE' }), 'تم حذف المصدر');
-  }));
-  $('srcList').querySelectorAll('[data-source-toggle]').forEach(btn => btn.addEventListener('click', () => {
-    const id = Number(btn.dataset.sourceToggle), active = btn.dataset.active !== '1';
-    act(() => api('/sources/' + id, { _method: 'PATCH', active }), active ? 'تم تشغيل المصدر' : 'تم إيقاف المصدر مؤقتاً');
-  }));
-  $('srcList').querySelectorAll('[data-source-test]').forEach(btn => btn.addEventListener('click', () => {
-    const id = Number(btn.dataset.sourceTest); act(() => api('/sources/' + id + '/test', {}), r => `نجح الاختبار · ${r.item_count} خبر متاح`);
-  }));
+  $('srcList').querySelectorAll('[data-source-id]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const id = Number(btn.dataset.sourceId);
+      if (!Number.isSafeInteger(id) || id <= 0) return;
+      if (confirm('هل تريد حذف هذا المصدر نهائياً؟')) act(() => api('/sources/' + id, { _method: 'DELETE' }), 'تم حذف المصدر');
+    });
+  });
 
   $('tgtList').innerHTML = (s.targets || []).map(x =>
-    `<div class="item"><span dir="ltr">${esc(x.chat_id)} <small class="tag ${x.active ? '' : 'off'}">${x.active ? 'نشر نشط' : 'متوقف'}</small></span><div class="item-actions"><button class="btn-mini ${x.active ? 'active' : ''}" data-target-toggle="${Number(x.id)}" data-active="${x.active ? 1 : 0}">${x.active ? 'إيقاف' : 'تشغيل'}</button><button class="btn-mini danger" data-target-delete="${Number(x.id)}">حذف</button></div></div>`
+    `<div class="item"><span dir="ltr">${esc(x.chat_id)}</span><span class="tag">نشر نشط</span></div>`
   ).join('') || '<small>أضف قناة نشر واحدة على الأقل</small>';
-  $('tgtList').querySelectorAll('[data-target-toggle]').forEach(btn => btn.addEventListener('click', () => {
-    const id = Number(btn.dataset.targetToggle), active = btn.dataset.active !== '1';
-    act(() => api('/targets/' + id, { _method: 'PATCH', active }), active ? 'تم تفعيل قناة النشر' : 'تم إيقاف قناة النشر');
-  }));
-  $('tgtList').querySelectorAll('[data-target-delete]').forEach(btn => btn.addEventListener('click', () => {
-    const id = Number(btn.dataset.targetDelete);
-    if (confirm('هل تريد حذف قناة النشر؟')) act(() => api('/targets/' + id, { _method: 'DELETE' }), 'تم حذف قناة النشر');
-  }));
 
   $('priceBox').innerHTML = (s.prices || []).map(p => {
     const ch = Number(p.change24h || 0);
