@@ -26,6 +26,9 @@ const cfg = {
   nitterHosts: list(env.NITTER_HOSTS).filter(h => /^https?:\/\//i.test(h)),
   translateUrl: env.LIBRETRANSLATE_URL || '',
   translateKey: env.LIBRETRANSLATE_KEY || '',
+  aiApiKey: env.AI_API_KEY || env.OPENAI_API_KEY || '',
+  aiBaseUrl: env.AI_BASE_URL || 'https://api.openai.com/v1',
+  aiModel: env.AI_MODEL || 'gpt-4.1-mini',
   adFilter: env.AD_FILTER !== '0',
   adExtra: list(env.AD_KEYWORDS_EXTRA),
   maxAgeMs: num(env.MAX_AGE_HOURS, 12, 1) * 3600 * 1000,
@@ -50,7 +53,6 @@ const core = createCore({ db, bot, cfg });
 
 const app = express();
 app.use(express.json({ limit: '50kb' }));
-app.get('/healthz', (req, res) => res.json({ ok: true }));
 app.use(express.static(path.join(__dirname, 'public')));
 app.get('/', (req, res) => {
   const pub = path.join(__dirname, 'public', 'index.html');
@@ -59,6 +61,7 @@ app.get('/', (req, res) => {
 
 // Every /api route is admin-only (Telegram signature + your user id).
 const ah = fn => (req, res) => fn(req, res).catch(e => { console.error(e); if (!res.headersSent) res.status(500).json({ error: 'server' }); });
+app.get('/healthz', ah(core.handlers.health));
 app.use('/api', core.adminAuth);
 app.get('/api/state', ah(core.handlers.state));
 app.post('/api/toggle', ah(core.handlers.toggle));
@@ -66,7 +69,11 @@ app.post('/api/template', ah(core.handlers.template));
 app.post('/api/buttons', ah(core.handlers.buttons));
 app.post('/api/sources', ah(core.handlers.sources));
 app.delete('/api/sources/:id', ah(core.handlers.deleteSource));
+app.patch('/api/sources/:id', ah(core.handlers.sourceActive));
+app.post('/api/sources/:id/test', ah(core.handlers.testSource));
 app.post('/api/targets', ah(core.handlers.targets));
+app.patch('/api/targets/:id', ah(core.handlers.targetActive));
+app.delete('/api/targets/:id', ah(core.handlers.deleteTarget));
 app.post('/api/fetch-now', ah(core.handlers.fetchNow));
 
 process.on('unhandledRejection', e => console.error('unhandledRejection', e));

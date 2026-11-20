@@ -1,13 +1,14 @@
 {
   "name": "alkatiba-news-bot",
-  "version": "1.4.0",
-  "description": "Crypto news and market alerts Telegram bot with an admin-only control panel",
+  "version": "2.0.0",
+  "description": "AI-assisted crypto news and multi-channel market alerts Telegram bot",
   "main": "server.js",
   "engines": {
     "node": ">=18"
   },
   "scripts": {
-    "start": "node server.js"
+    "start": "node server.js",
+    "test": "node --test"
   },
   "dependencies": {
     "@libsql/client": "^0.14.0",

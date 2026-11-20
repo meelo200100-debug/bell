@@ -14,9 +14,14 @@ class TelegramBot extends EventEmitter {
     if (options.polling) this.startPolling().catch(() => {});
   }
 
-  async call(method, payload = {}, timeoutMs = 30000) {
+  async call(method, payload = {}, timeoutMs = 30000, externalSignal = null) {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), timeoutMs);
+    const abortFromParent = () => controller.abort();
+    if (externalSignal) {
+      if (externalSignal.aborted) controller.abort();
+      else externalSignal.addEventListener('abort', abortFromParent, { once: true });
+    }
     try {
       const response = await fetch(`${this.apiBase}/${method}`, {
         method: 'POST',
@@ -33,6 +38,7 @@ class TelegramBot extends EventEmitter {
       return data.result;
     } finally {
       clearTimeout(timer);
+      if (externalSignal) externalSignal.removeEventListener('abort', abortFromParent);
     }
   }
 
@@ -59,7 +65,7 @@ class TelegramBot extends EventEmitter {
           offset: this.offset,
           timeout: 25,
           allowed_updates: ['message'],
-        }, 35000);
+        }, 35000, this.abortController.signal);
         for (const update of result || []) {
           this.offset = Math.max(this.offset, Number(update.update_id || 0) + 1);
           if (update.message) this.emit('message', update.message);
