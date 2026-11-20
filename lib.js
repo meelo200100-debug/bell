@@ -51,7 +51,7 @@ const cleanSlug = s => String(s || '').trim()
 // Telegram channel to READ from (username only).
 function cleanChannelName(input) {
   const s = cleanSlug(input);
-  return /^[A-Za-z0-9_]{4,64}$/.test(s) ? s : '';
+  return /^[A-Za-z0-9_]{5,32}$/.test(s) ? s : '';
 }
 
 // Chat to POST to: numeric id or @username.
@@ -59,7 +59,7 @@ function cleanTargetChannel(input) {
   const raw = String(input || '').trim();
   if (/^-?\d{5,20}$/.test(raw)) return raw;
   const s = cleanSlug(raw);
-  return /^[A-Za-z0-9_]{4,64}$/.test(s) ? `@${s}` : '';
+  return /^[A-Za-z0-9_]{5,32}$/.test(s) ? `@${s}` : '';
 }
 
 function cleanXHandle(input) {
@@ -71,7 +71,20 @@ function cleanXHandle(input) {
 
 function cleanFeedUrl(input) {
   const s = String(input || '').trim();
-  return /^https?:\/\/[^\s<>"']{4,500}$/i.test(s) ? s : '';
+  return isSafeRemoteUrl(s) && s.length <= 500 ? s : '';
+}
+
+// Reject URLs that could target local/cloud metadata services if an admin session is compromised.
+function isSafeRemoteUrl(input) {
+  let u;
+  try { u = new URL(String(input || '').trim()); } catch (_) { return false; }
+  if (!/^https?:$/.test(u.protocol) || u.username || u.password || !u.hostname) return false;
+  const host = u.hostname.toLowerCase().replace(/^\[|\]$/g, '').replace(/\.$/, '');
+  if (host === 'localhost' || host === 'localhost.localdomain' || host.endsWith('.local') || host.endsWith('.internal')) return false;
+  if (/^(0|127|10|192\.168|169\.254)\./.test(host)) return false;
+  if (/^172\.(1[6-9]|2\d|3[01])\./.test(host)) return false;
+  if (host === '::1' || host.startsWith('fc') || host.startsWith('fd') || host.startsWith('fe80:')) return false;
+  return true;
 }
 
 // Removes links, @handles, source attributions (channel/group/site names), and Markdown-breaking characters.
@@ -271,7 +284,7 @@ function verifyInitData(init, token, maxAgeSec = 86400, nowSec = Date.now() / 10
   const calc = crypto.createHmac('sha256', key).update(str).digest();
   if (!crypto.timingSafeEqual(Buffer.from(hash, 'hex'), calc)) return null;
   const ad = Number(p.get('auth_date'));
-  if (!ad || nowSec - ad > maxAgeSec) return null;
+  if (!Number.isFinite(ad) || ad <= 0 || ad > nowSec + 60 || nowSec - ad > maxAgeSec) return null;
   let user; try { user = JSON.parse(p.get('user')); } catch (e) { return null; }
   if (!user || !Number.isSafeInteger(user.id)) return null;
   return { user };
@@ -279,7 +292,7 @@ function verifyInitData(init, token, maxAgeSec = 86400, nowSec = Date.now() / 10
 
 module.exports = {
   DEFAULT_CHANNELS, DEFAULT_RSS_FEEDS, DEFAULT_X_HANDLES, DEFAULT_TEMPLATE, DEFAULT_PROMO,
-  cleanChannelName, cleanTargetChannel, cleanXHandle, cleanFeedUrl,
+  cleanChannelName, cleanTargetChannel, cleanXHandle, cleanFeedUrl, isSafeRemoteUrl,
   stripLinksAndHandles, toBoldLines, newsHash, hasContent, truncate, isArabic, isPromo, parseDate,
   applyTemplate, polishArabicTranslation, formatCleanBilingualPost, formatPriceAlert, verifyInitData,
 };

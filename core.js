@@ -75,6 +75,7 @@ async function mapLimit(items, limit, fn) {
 
 function createCore({ db, bot, cfg, fetchFn = fetch, sleep = ms => new Promise(r => setTimeout(r, ms)), now = Date.now }) {
   let isRunning = true, lastCycleAt = null, lastError = null, latestPrices = [], cycleRunning = false;
+  const lockOwner = `${process.pid}-${Math.random().toString(36).slice(2)}`;
   const run = (sql, args = []) => db.execute({ sql, args });
   const first = r => (r.rows && r.rows[0]) || null;
 
@@ -86,6 +87,8 @@ function createCore({ db, bot, cfg, fetchFn = fetch, sleep = ms => new Promise(r
     await run(`CREATE TABLE IF NOT EXISTS targets(
       id INTEGER PRIMARY KEY AUTOINCREMENT, chat_id TEXT NOT NULL UNIQUE, active INTEGER DEFAULT 1)`);
     await run('CREATE TABLE IF NOT EXISTS posted_items(hash TEXT PRIMARY KEY, source TEXT, title TEXT, posted_at INTEGER)');
+    await run('CREATE TABLE IF NOT EXISTS failed_items(hash TEXT PRIMARY KEY, retry_after INTEGER, reason TEXT)');
+    await run('CREATE TABLE IF NOT EXISTS cycle_locks(name TEXT PRIMARY KEY, owner TEXT NOT NULL, expires_at INTEGER NOT NULL)');
 
     const en = first(await run("SELECT v FROM settings WHERE k='enabled'"));
     if (!en) await run("INSERT INTO settings(k, v) VALUES('enabled', '1')");
@@ -130,7 +133,7 @@ function createCore({ db, bot, cfg, fetchFn = fetch, sleep = ms => new Promise(r
     const html = await res.text();
     const titleMatch = /class="tgme_channel_info_header_title[^"]*"[^>]*>([\s\S]*?)<\/div>/i.exec(html);
     const channelTitle = titleMatch ? decodeHtml(titleMatch[1]) : '';
-    return html.split('data-post="').slice(1).slice(-8).map(block => {
+    return html.split('data-post="').slice(1).slice(-30).map(block => {
       const m = /class="tgme_widget_message_text[^"]*"[^>]*>([\s\S]*?)<\/div>/.exec(block);
       if (!m) return null;
       const authorMatch = /class="tgme_widget_message_author_name[^"]*"[^>]*>([\s\S]*?)<\/span>/i.exec(block);
@@ -144,6 +147,7 @@ function createCore({ db, bot, cfg, fetchFn = fetch, sleep = ms => new Promise(r
   }
 
   async function fetchRssFeed(feedUrl) {
+    if (!L.isSafeRemoteUrl(feedUrl)) return [];
     const res = await fetchFn(feedUrl, { headers: UA, signal: AbortSignal.timeout(10000) });
     if (!res.ok) return [];
     const xml = await res.text();
@@ -190,6 +194,7 @@ function createCore({ db, bot, cfg, fetchFn = fetch, sleep = ms => new Promise(r
     // 1. Custom LibreTranslate server if configured
     if (cfg.translateUrl) {
       try {
+        if (!L.isSafeRemoteUrl(cfg.translateUrl)) throw new Error('unsafe translation URL');
         const r = await fetchFn(`${cfg.translateUrl.replace(/\/$/, '')}/translate`, {
           method: 'POST', headers: { 'Content-Type': 'application/json' }, signal: AbortSignal.timeout(8000),
           body: JSON.stringify({ q: cleanInput, source: 'auto', target: 'ar', format: 'text', ...(cfg.translateKey ? { api_key: cfg.translateKey } : {}) }),
@@ -299,9 +304,22 @@ function createCore({ db, bot, cfg, fetchFn = fetch, sleep = ms => new Promise(r
   }
 
   // ---------- main cycle ----------
+  async function acquireCycleLock() {
+    const expires = now() + 10 * 60 * 1000;
+    const result = await run(`INSERT INTO cycle_locks(name, owner, expires_at) VALUES('news', ?, ?)
+      ON CONFLICT(name) DO UPDATE SET owner=excluded.owner, expires_at=excluded.expires_at
+      WHERE cycle_locks.expires_at < ?`, [lockOwner, expires, now()]);
+    return Number(result.rowsAffected || 0) > 0;
+  }
+
+  async function releaseCycleLock() {
+    await run('DELETE FROM cycle_locks WHERE name=? AND owner=?', ['news', lockOwner]);
+  }
+
   async function runNewsCycle(force = false) {
     if (!isRunning && !force) return { skipped: true, published: 0 };
     if (cycleRunning) return { skipped: true, busy: true, published: 0 };
+    if (!await acquireCycleLock()) return { skipped: true, busy: true, published: 0 };
     cycleRunning = true; lastCycleAt = now(); lastError = null;
     try {
       const targets = await getActiveTargets();
@@ -323,6 +341,8 @@ function createCore({ db, bot, cfg, fetchFn = fetch, sleep = ms => new Promise(r
         if (inBatch.has(h)) continue;
         inBatch.add(h);
         if (first(await run('SELECT 1 FROM posted_items WHERE hash=?', [h]))) continue;
+        const failed = first(await run('SELECT retry_after FROM failed_items WHERE hash=?', [h]));
+        if (failed && Number(failed.retry_after) > now()) continue;
         picked.push({ ...it, h });
       }
       picked.reverse(); // newest last, so the channel reads in order
@@ -339,8 +359,10 @@ function createCore({ db, bot, cfg, fetchFn = fetch, sleep = ms => new Promise(r
         if (!ar) {
           lastError = `تعذرت ترجمة الخبر إلى العربية؛ تم تخطيه: ${String(it.sourceTitle || it.source || 'مصدر غير معروف')}`;
           console.warn(lastError);
+          await run('INSERT INTO failed_items(hash, retry_after, reason) VALUES(?, ?, ?) ON CONFLICT(hash) DO UPDATE SET retry_after=excluded.retry_after, reason=excluded.reason', [it.h, now() + 6 * 3600 * 1000, 'translation_failed']);
           continue;
         }
+        await run('DELETE FROM failed_items WHERE hash=?', [it.h]);
         const r = await publish(L.formatCleanBilingualPost({ bodyAr: ar, bodyEn: '', template, sourceName: it.sourceTitle || it.source || '', bilingual: false }), targets);
         if (!r.done) { lastError = `Telegram unreachable: ${r.error}`; break; }
         await run('INSERT OR IGNORE INTO posted_items(hash, source, title, posted_at) VALUES(?, ?, ?, ?)', [it.h, it.source || 'feed', it.text.slice(0, 120), now()]);
@@ -351,6 +373,7 @@ function createCore({ db, bot, cfg, fetchFn = fetch, sleep = ms => new Promise(r
       catch (e) { console.warn('Market alerts failed:', e.message); }
 
       await run('DELETE FROM posted_items WHERE posted_at < ?', [now() - 30 * DAY]);
+      await run('DELETE FROM failed_items WHERE retry_after < ?', [now() - 7 * DAY]);
       return { skipped: false, published };
     } catch (e) {
       lastError = e.message;
@@ -358,6 +381,7 @@ function createCore({ db, bot, cfg, fetchFn = fetch, sleep = ms => new Promise(r
       return { skipped: false, published: 0, error: e.message };
     } finally {
       cycleRunning = false;
+      await releaseCycleLock().catch(e => console.warn('Cycle lock release failed:', e.message));
     }
   }
 

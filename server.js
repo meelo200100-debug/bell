@@ -2,7 +2,7 @@ const express = require('express');
 const path = require('path');
 const fs = require('fs');
 const { createClient } = require('@libsql/client');
-const TelegramBot = require('node-telegram-bot-api');
+const TelegramBot = require('./telegram');
 const { createCore } = require('./core');
 
 const env = process.env;
@@ -43,10 +43,10 @@ const db = createClient({
 });
 if (!TURSO_DATABASE_URL) console.warn('TURSO_DATABASE_URL is not set: data lives in a local file and is lost on redeploy.');
 
-const bot = new TelegramBot(BOT_TOKEN, { polling: true });
+// Polling starts only after the database schema is ready below.
+const bot = new TelegramBot(BOT_TOKEN);
 bot.on('polling_error', e => console.error('polling_error', e.code, e.message));
 const core = createCore({ db, bot, cfg });
-core.registerCommands();
 
 const app = express();
 app.use(express.json({ limit: '50kb' }));
@@ -72,6 +72,8 @@ process.on('unhandledRejection', e => console.error('unhandledRejection', e));
 
 core.initDB()
   .then(() => {
+    core.registerCommands();
+    bot.startPolling().catch(e => console.error('Polling start failed:', e));
     app.listen(PORT, () => console.log('News & Market Bot server running on port', PORT));
     setInterval(() => core.runNewsCycle(false).catch(e => console.error(e)), intervalMs);
     setTimeout(() => core.runNewsCycle(false).catch(e => console.error(e)), 4000);
