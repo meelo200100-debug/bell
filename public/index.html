@@ -45,6 +45,9 @@ input:focus,select:focus,textarea:focus{border-color:var(--ac)}
 .tabs button.on{background:rgba(46,229,157,.14);color:var(--ac)}
 .pane{display:none}.pane.on{display:block}
 #toast{position:fixed;bottom:74px;left:14px;right:14px;max-width:492px;margin:0 auto;background:#122b3d;border:1px solid var(--ac);color:var(--tx);padding:10px 14px;border-radius:12px;font-size:13px;display:none;z-index:20}
+#banner{display:none;background:rgba(245,185,66,.12);border:1px solid rgba(245,185,66,.4);color:#ffd98a;border-radius:14px;padding:10px 12px;margin-bottom:12px;font-size:13px}
+#banner.bad{background:rgba(255,107,107,.12);border-color:rgba(255,107,107,.4);color:#ffb4b4}
+.mini{color:var(--mu);font-size:12px;margin-top:6px}
 </style>
 </head>
 <body>
@@ -52,14 +55,16 @@ input:focus,select:focus,textarea:focus{border-color:var(--ac)}
   <header class="hd">
     <div class="brand">
       <h1>PULSE NEWS</h1>
-      <small>أخبار وأحداث الكريبتو والأسواق · عربي / إنجليزي</small>
+      <small>أخبار وأحداث الكريبتو والأسواق</small>
     </div>
-    <div class="pill" id="statusPill"><span class="dot"></span><span id="statusText">يعمل</span></div>
+    <div class="pill" id="statusPill"><span class="dot"></span><span id="statusText">...</span></div>
   </header>
 
+  <div id="banner" role="status"></div>
+
   <div class="grid3">
-    <div class="stat"><b id="pubCount">0</b><small>منشور أُرسل</small></div>
-    <div class="stat"><b id="srcCount">0</b><small>مصدر نشط</small></div>
+    <div class="stat"><b id="pubCount">0</b><small>منشور مسجّل</small></div>
+    <div class="stat"><b id="srcCount">0</b><small>مصدر</small></div>
     <div class="stat"><b id="tgtCount">0</b><small>قناة نشر</small></div>
   </div>
 
@@ -71,6 +76,7 @@ input:focus,select:focus,textarea:focus{border-color:var(--ac)}
         <button class="btn-off" id="btnOff">⏸ إيقاف البوت</button>
       </div>
       <button class="btn-sec" id="btnFetch" style="width:100%;margin-top:8px">⚡ جلب ونشر الأخبار والأسعار الآن</button>
+      <div class="mini" id="cycleInfo"></div>
     </div>
 
     <div class="card">
@@ -89,9 +95,10 @@ input:focus,select:focus,textarea:focus{border-color:var(--ac)}
           <option value="x_account">حساب X / تويتر</option>
           <option value="rss">موقع أخبار (RSS)</option>
         </select>
-        <input id="srcVal" placeholder="@WatcherGuru أو رابط RSS">
+        <input id="srcVal" placeholder="@WatcherGuru أو رابط RSS" dir="ltr">
         <button class="btn-add" id="btnAddSrc">إضافة</button>
       </div>
+      <div class="mini" id="xInfo"></div>
       <div class="list" id="srcList"></div>
     </div>
   </section>
@@ -100,7 +107,7 @@ input:focus,select:focus,textarea:focus{border-color:var(--ac)}
     <div class="card">
       <h2>قنوات النشر (عيّن البوت أدمن فيها)</h2>
       <div class="row">
-        <input id="tgtVal" placeholder="@Alkatiba21 أو -100123456789">
+        <input id="tgtVal" placeholder="@Alkatiba21 أو -100123456789" dir="ltr">
         <button class="btn-add" id="btnAddTgt">إضافة قناة</button>
       </div>
       <div class="list" id="tgtList"></div>
@@ -125,22 +132,45 @@ input:focus,select:focus,textarea:focus{border-color:var(--ac)}
 const tg = window.Telegram && Telegram.WebApp;
 if (tg) { tg.ready(); tg.expand(); }
 const $ = id => document.getElementById(id);
+// Everything coming from the server is escaped before it is put into innerHTML.
+const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
+const ERR = {
+  no_telegram: 'افتح اللوحة من داخل تليجرام عبر الأمر /panel في محادثة البوت.',
+  unauthorized: 'انتهت الجلسة. أغلق اللوحة وافتحها من جديد عبر /panel.',
+  forbidden: 'هذا الحساب غير مصرّح له بإدارة البوت.',
+  invalid_value: 'قيمة غير صالحة.',
+  invalid_type: 'نوع المصدر غير صالح.',
+  invalid_target: 'معرّف القناة غير صالح.',
+  empty_template: 'القالب فارغ.',
+  template_too_long: 'القالب طويل جداً (الحد 3000 حرف).',
+  server: 'خطأ في الخادم، حاول مرة أخرى.',
+};
+const errText = e => ERR[e && e.code] || 'تعذر الاتصال بالخادم.';
 
 function notify(msg) {
   const t = $('toast');
   t.textContent = msg;
   t.style.display = 'block';
   clearTimeout(window._tt);
-  window._tt = setTimeout(() => { t.style.display = 'none'; }, 3000);
+  window._tt = setTimeout(() => { t.style.display = 'none'; }, 3500);
+}
+function banner(text, bad) {
+  const b = $('banner');
+  b.textContent = text || '';
+  b.className = bad ? 'bad' : '';
+  b.style.display = text ? 'block' : 'none';
 }
 
 async function api(path, body) {
-  const r = await fetch('/api' + path, {
-    method: body ? 'POST' : 'GET',
-    headers: body ? { 'Content-Type': 'application/json' } : undefined,
-    body: body ? JSON.stringify(body) : undefined,
-  });
-  return r.json();
+  if (!tg || !tg.initData) { const e = new Error('no_telegram'); e.code = 'no_telegram'; throw e; }
+  const headers = { 'x-init': tg.initData };
+  if (body) headers['Content-Type'] = 'application/json';
+  const r = await fetch('/api' + path, { method: body ? 'POST' : 'GET', headers, body: body ? JSON.stringify(body) : undefined });
+  let j = {};
+  try { j = await r.json(); } catch (e) { /* empty body */ }
+  if (!r.ok) { const e = new Error(j.error || 'http ' + r.status); e.code = j.error || (r.status === 401 ? 'unauthorized' : 'server'); throw e; }
+  return j;
 }
 
 function render(s) {
@@ -150,45 +180,52 @@ function render(s) {
   $('statusText').textContent = s.running ? 'يعمل تلقائياً' : 'متوقف';
   $('statusPill').classList.toggle('off', !s.running);
   if (document.activeElement !== $('tplInput')) $('tplInput').value = s.template || '';
+  $('cycleInfo').textContent = s.lastCycleAt ? 'آخر دورة: ' + new Date(s.lastCycleAt).toLocaleString('ar-EG') + (s.busy ? ' (جارية الآن)' : '') : 'لم تُنفَّذ دورة بعد';
+  $('xInfo').textContent = s.xEnabled ? '' : 'مصادر X متوقفة حالياً: تحتاج استضافة Nitter (متغير NITTER_HOSTS).';
+  banner(s.lastError ? 'آخر خطأ: ' + s.lastError : '', true);
 
   $('srcList').innerHTML = (s.sources || []).map(x =>
-    `<div class="item"><span>${x.value}</span><span class="tag">${x.type}</span></div>`
+    `<div class="item"><span dir="ltr">${esc(x.value)}</span><span class="tag">${esc(x.type)}</span></div>`
   ).join('') || '<small>لا توجد مصادر بعد</small>';
 
   $('tgtList').innerHTML = (s.targets || []).map(x =>
-    `<div class="item"><span>${x.chat_id}</span><span class="tag">نشر نشط</span></div>`
+    `<div class="item"><span dir="ltr">${esc(x.chat_id)}</span><span class="tag">نشر نشط</span></div>`
   ).join('') || '<small>أضف قناة نشر واحدة على الأقل</small>';
 
   $('priceBox').innerHTML = (s.prices || []).map(p => {
     const ch = Number(p.change24h || 0);
     const cls = ch >= 0 ? 'up' : 'dn';
     const sgn = ch >= 0 ? '+' : '';
-    return `<div class="pbox"><div><b>${p.symbol}</b><br><small>$${Number(p.price || 0).toLocaleString('en-US', { maximumFractionDigits: 4 })}</small></div><span class="${cls}">${sgn}${ch.toFixed(2)}%</span></div>`;
+    return `<div class="pbox"><div><b>${esc(p.symbol)}</b><br><small>$${Number(p.price || 0).toLocaleString('en-US', { maximumFractionDigits: 4 })}</small></div><span class="${cls}">${sgn}${ch.toFixed(2)}%</span></div>`;
   }).join('') || '<small>سيتم تحديث الأسعار في دورة الجلب التالية</small>';
 }
 
-async function load() { render(await api('/state')); }
+let stopPolling = false;
+async function load() {
+  try { render(await api('/state')); }
+  catch (e) {
+    banner(errText(e), true);
+    if (e.code === 'no_telegram' || e.code === 'forbidden') stopPolling = true;
+  }
+}
+async function act(fn, okMsg) {
+  try { const r = await fn(); if (okMsg) notify(typeof okMsg === 'function' ? okMsg(r) : okMsg); await load(); }
+  catch (e) { notify(errText(e)); }
+}
 
-$('btnOn').onclick = async () => { await api('/toggle', { running: true }); notify('تم تشغيل البوت'); load(); };
-$('btnOff').onclick = async () => { await api('/toggle', { running: false }); notify('تم إيقاف البوت'); load(); };
-$('btnSaveTpl').onclick = async () => { await api('/template', { template: $('tplInput').value }); notify('تم حفظ القالب'); load(); };
-$('btnAddSrc').onclick = async () => {
-  await api('/sources', { type: $('srcType').value, value: $('srcVal').value });
-  $('srcVal').value = '';
-  notify('تمت إضافة المصدر');
-  load();
-};
-$('btnAddTgt').onclick = async () => {
-  await api('/targets', { chat_id: $('tgtVal').value });
-  $('tgtVal').value = '';
-  notify('تمت إضافة قناة النشر');
-  load();
-};
-$('btnFetch').onclick = async () => {
-  const res = await api('/fetch-now', {});
-  notify(`تم الجلب · منشورات جديدة: ${res.published || 0}`);
-  load();
-};
+$('btnOn').onclick = () => act(() => api('/toggle', { running: true }), 'تم تشغيل البوت');
+$('btnOff').onclick = () => act(() => api('/toggle', { running: false }), 'تم إيقاف البوت');
+$('btnSaveTpl').onclick = () => act(() => api('/template', { template: $('tplInput').value }), 'تم حفظ القالب');
+$('btnAddSrc').onclick = () => act(async () => {
+  const r = await api('/sources', { type: $('srcType').value, value: $('srcVal').value });
+  $('srcVal').value = ''; return r;
+}, 'تمت إضافة المصدر');
+$('btnAddTgt').onclick = () => act(async () => {
+  const r = await api('/targets', { chat_id: $('tgtVal').value });
+  $('tgtVal').value = ''; return r;
+}, 'تمت إضافة قناة النشر');
+$('btnFetch').onclick = () => act(() => api('/fetch-now', {}),
+  r => r.busy ? 'هناك عملية جلب جارية الآن' : `تم الجلب · منشورات جديدة: ${r.published || 0}`);
 
 document.querySelectorAll('.tabs button').forEach(btn => {
   btn.onclick = () => {
@@ -199,7 +236,7 @@ document.querySelectorAll('.tabs button').forEach(btn => {
 });
 
 load();
-setInterval(load, 15000);
+setInterval(() => { if (!stopPolling) load(); }, 15000);
 </script>
 </body>
 </html>
