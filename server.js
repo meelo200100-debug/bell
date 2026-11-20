@@ -73,16 +73,18 @@ async function initDB() {
     isRunning = enabledRes.rows[0].v !== '0';
   }
 
-  const tplRes = await run("SELECT v FROM settings WHERE k='template'");
-  if (!tplRes.rows || !tplRes.rows.length) {
-    await run("INSERT INTO settings(k, v) VALUES('template', ?)", [L.DEFAULT_TEMPLATE]);
-  }
+  await run("INSERT INTO settings(k, v) VALUES('template', ?) ON CONFLICT(k) DO UPDATE SET v=excluded.v", [
+    L.DEFAULT_TEMPLATE,
+  ]);
 
   for (const ch of L.DEFAULT_CHANNELS) {
     await run("INSERT OR IGNORE INTO sources(type, value, active) VALUES('tg_channel', ?, 1)", [ch]);
   }
   for (const feed of L.DEFAULT_RSS_FEEDS) {
     await run("INSERT OR IGNORE INTO sources(type, value, active) VALUES('rss', ?, 1)", [feed]);
+  }
+  for (const handle of L.DEFAULT_X_HANDLES) {
+    await run("INSERT OR IGNORE INTO sources(type, value, active) VALUES('x_account', ?, 1)", [handle]);
   }
   if (X_FEED_URL) {
     for (const u of X_FEED_URL.split(',').map(s => s.trim()).filter(Boolean)) {
@@ -144,19 +146,15 @@ async function fetchTelegramChannel(username) {
   const blocks = [...html.matchAll(/class="tgme_widget_message_text[^"]*"[^>]*>([\s\S]*?)<\/div>/g)];
   return blocks
     .slice(-8)
-    .map(m => decodeHtml(m[1]))
+    .map(m => L.stripLinksAndHandles(decodeHtml(m[1])))
     .filter(txt => txt.length >= 20)
     .map(txt => ({
-      source: `@${username}`,
-      titleEn: txt.split('\n')[0].slice(0, 120),
-      bodyEn: txt.slice(0, 700),
-      titleAr: 'خبر من قناة متابعة',
-      bodyAr: txt.slice(0, 700),
-      url: `https://t.me/${username}`,
+      bodyAr: txt,
+      bodyEn: txt,
     }));
 }
 
-async function fetchRssOrXFeed(feedUrl, labelPrefix = 'News') {
+async function fetchRssFeed(feedUrl) {
   const res = await fetch(feedUrl, {
     headers: { 'User-Agent': 'Mozilla/5.0 (compatible; CryptoNewsBot/1.0)' },
     signal: AbortSignal.timeout(10000),
@@ -164,25 +162,38 @@ async function fetchRssOrXFeed(feedUrl, labelPrefix = 'News') {
   if (!res.ok) return [];
   const xml = await res.text();
   const items = [...xml.matchAll(/<item[\s\S]*?<\/item>/gi)];
-  const host = (() => {
-    try { return new URL(feedUrl).hostname.replace(/^www\./, ''); } catch { return labelPrefix; }
-  })();
+  return items
+    .slice(0, 8)
+    .map(block => {
+      const raw = block[0];
+      const title = L.stripLinksAndHandles(decodeHtml((raw.match(/<title[^>]*>([\s\S]*?)<\/title>/i) || [])[1] || ''));
+      const desc = L.stripLinksAndHandles(decodeHtml((raw.match(/<description[^>]*>([\s\S]*?)<\/description>/i) || [])[1] || ''));
+      const combined = desc && !desc.toLowerCase().startsWith(title.toLowerCase()) ? `${title}\n${desc}` : (desc || title);
+      return {
+        bodyAr: combined,
+        bodyEn: combined,
+      };
+    })
+    .filter(x => x.bodyEn && x.bodyEn.length >= 15);
+}
 
-  return items.slice(0, 8).map(block => {
-    const raw = block[0];
-    const title = decodeHtml((raw.match(/<title[^>]*>([\s\S]*?)<\/title>/i) || [])[1] || '');
-    const desc = decodeHtml((raw.match(/<description[^>]*>([\s\S]*?)<\/description>/i) || [])[1] || '');
-    const link = decodeHtml((raw.match(/<link[^>]*>([\s\S]*?)<\/link>/i) || [])[1] || feedUrl);
-    const summary = (desc || title).slice(0, 650);
-    return {
-      source: `${labelPrefix} (${host})`,
-      titleEn: title.slice(0, 140) || 'Crypto & Market Update',
-      bodyEn: summary,
-      titleAr: title.slice(0, 140) || 'تحديث السوق والأحداث',
-      bodyAr: summary,
-      url: link,
-    };
-  }).filter(x => x.titleEn || x.bodyEn);
+async function fetchXAccount(handleOrUrl) {
+  const clean = L.cleanXHandle(handleOrUrl);
+  if (!clean) return [];
+  const candidateUrls = /^https?:\/\//i.test(clean)
+    ? [clean]
+    : [
+        `https://nitter.net/${encodeURIComponent(clean)}/rss`,
+        `https://nitter.poast.org/${encodeURIComponent(clean)}/rss`,
+      ];
+
+  for (const u of candidateUrls) {
+    try {
+      const items = await fetchRssFeed(u);
+      if (items.length) return items;
+    } catch (_) {}
+  }
+  return [];
 }
 
 async function fetchCryptoMarketAlerts(template, targets) {
@@ -224,12 +235,15 @@ async function fetchCryptoMarketAlerts(template, targets) {
 
     const msg = L.formatPriceAlert(item, template);
     for (const chatId of targets) {
-      await bot.sendMessage(chatId, msg, { parse_mode: 'Markdown', disable_web_page_preview: true });
+      await bot.sendMessage(chatId, msg, {
+        parse_mode: 'Markdown',
+        disable_web_page_preview: true,
+      });
     }
     await run('INSERT OR IGNORE INTO posted_items(hash, source, title, posted_at) VALUES(?, ?, ?, ?)', [
       h,
-      'Market Tracker',
-      `${item.symbol} ${item.change24h.toFixed(2)}%`,
+      'market',
+      item.symbol,
       Date.now(),
     ]);
     published++;
@@ -254,10 +268,10 @@ async function runNewsCycle(force = false) {
       try {
         if (s.type === 'tg_channel') {
           collected.push(...(await fetchTelegramChannel(s.value)));
-        } else if (s.type === 'rss') {
-          collected.push(...(await fetchRssOrXFeed(s.value, 'Global News')));
-        } else if (s.type === 'x_feed') {
-          collected.push(...(await fetchRssOrXFeed(s.value, 'X / Twitter')));
+        } else if (s.type === 'rss' || s.type === 'x_feed') {
+          collected.push(...(await fetchRssFeed(s.value)));
+        } else if (s.type === 'x_account') {
+          collected.push(...(await fetchXAccount(s.value)));
         }
       } catch (e) {
         console.warn(`Source fetch error [${s.value}]:`, e.message);
@@ -266,11 +280,13 @@ async function runNewsCycle(force = false) {
 
     let published = 0;
     for (const item of collected) {
-      const h = L.newsHash(`${item.titleEn} ${item.bodyEn}`);
+      const h = L.newsHash(`${item.bodyAr} ${item.bodyEn}`);
       const seen = await run('SELECT 1 FROM posted_items WHERE hash=?', [h]);
       if (seen.rows && seen.rows.length) continue;
 
-      const formatted = L.formatBilingualNews({ ...item, template });
+      const formatted = L.formatCleanBilingualPost({ ...item, template });
+      if (!L.stripLinksAndHandles(item.bodyEn || item.bodyAr)) continue;
+
       for (const chatId of targets) {
         await bot.sendMessage(chatId, formatted, {
           parse_mode: 'Markdown',
@@ -279,8 +295,8 @@ async function runNewsCycle(force = false) {
       }
       await run('INSERT OR IGNORE INTO posted_items(hash, source, title, posted_at) VALUES(?, ?, ?, ?)', [
         h,
-        item.source,
-        item.titleEn,
+        'feed',
+        (item.bodyEn || item.bodyAr).slice(0, 120),
         Date.now(),
       ]);
       published++;
@@ -338,7 +354,7 @@ app.post('/api/template', async (req, res) => {
 app.post('/api/sources', async (req, res) => {
   const type = String((req.body && req.body.type) || 'tg_channel');
   const rawVal = String((req.body && req.body.value) || '').trim();
-  const value = type === 'tg_channel' ? L.cleanChannelName(rawVal) : rawVal;
+  const value = type === 'tg_channel' ? L.cleanChannelName(rawVal) : type === 'x_account' ? L.cleanXHandle(rawVal) : rawVal;
   if (!value) return res.status(400).json({ error: 'invalid_value' });
   await run('INSERT OR IGNORE INTO sources(type, value, active) VALUES(?, ?, 1)', [type, value]);
   res.json({ ok: true });
@@ -361,8 +377,7 @@ const isAdmin = msg => !ADMIN || String(msg.chat && msg.chat.id) === ADMIN || St
 bot.onText(/^\/start(?:@\w+)?/, msg => {
   bot.sendMessage(
     msg.chat.id,
-    '📰 *Crypto & Events Auto-Publisher*\n\n' +
-      'القناة التجريبية المفعّلة: `@Alkatiba21`\n\n' +
+    '⚡ *عاجل — بوت الأخبار والأسواق*\n\n' +
       'الأوامر:\n' +
       '• `/on` — تشغيل النشر التلقائي\n' +
       '• `/off` — إيقاف النشر التلقائي\n' +
@@ -377,19 +392,19 @@ bot.onText(/^\/start(?:@\w+)?/, msg => {
 bot.onText(/^\/on(?:@\w+)?$/, async msg => {
   if (!isAdmin(msg)) return;
   await setEnabledState(true);
-  bot.sendMessage(msg.chat.id, '✅ تم تشغيل النشر التلقائي / Auto-publishing enabled.').catch(() => {});
+  bot.sendMessage(msg.chat.id, '✅ تم تشغيل النشر التلقائي').catch(() => {});
 });
 
 bot.onText(/^\/off(?:@\w+)?$/, async msg => {
   if (!isAdmin(msg)) return;
   await setEnabledState(false);
-  bot.sendMessage(msg.chat.id, '⏸️ تم إيقاف النشر التلقائي / Auto-publishing paused.').catch(() => {});
+  bot.sendMessage(msg.chat.id, '⏸️ تم إيقاف النشر التلقائي').catch(() => {});
 });
 
 bot.onText(/^\/addtarget(?:@\w+)?\s+(.+)/, async (msg, m) => {
   if (!isAdmin(msg)) return;
   const target = L.cleanTargetChannel(m[1]);
-  if (!target) return bot.sendMessage(msg.chat.id, '❌ معرّف قناة غير صالح.').catch(() => {});
+  if (!target) return bot.sendMessage(msg.chat.id, '❌ معرّف قناة غير صالح').catch(() => {});
   await run('INSERT OR IGNORE INTO targets(chat_id, active) VALUES(?, 1)', [target]);
   bot.sendMessage(msg.chat.id, `✅ تمت إضافة قناة النشر: ${target}`).catch(() => {});
 });
@@ -400,7 +415,7 @@ bot.onText(/^\/addsource(?:@\w+)?\s+(.+)/, async (msg, m) => {
   const isUrl = /^https?:\/\//i.test(raw);
   const type = isUrl ? (/x\.com|twitter\.com|nitter/i.test(raw) ? 'x_feed' : 'rss') : 'tg_channel';
   const val = type === 'tg_channel' ? L.cleanChannelName(raw) : raw;
-  if (!val) return bot.sendMessage(msg.chat.id, '❌ مصدر غير صالح.').catch(() => {});
+  if (!val) return bot.sendMessage(msg.chat.id, '❌ مصدر غير صالح').catch(() => {});
   await run('INSERT OR IGNORE INTO sources(type, value, active) VALUES(?, ?, 1)', [type, val]);
   bot.sendMessage(msg.chat.id, `✅ تمت إضافة المصدر (${type}): ${val}`).catch(() => {});
 });
@@ -409,7 +424,7 @@ bot.onText(/^\/settemplate(?:@\w+)?\s+([\s\S]+)/, async (msg, m) => {
   if (!isAdmin(msg)) return;
   const tpl = m[1].trim();
   await run("INSERT INTO settings(k, v) VALUES('template', ?) ON CONFLICT(k) DO UPDATE SET v=excluded.v", [tpl]);
-  bot.sendMessage(msg.chat.id, '✅ تم تحديث قالب النشر (الماكيت).').catch(() => {});
+  bot.sendMessage(msg.chat.id, '✅ تم تحديث قالب النشر').catch(() => {});
 });
 
 bot.onText(/^\/fetch(?:@\w+)?$/, async msg => {

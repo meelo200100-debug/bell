@@ -12,13 +12,36 @@ const DEFAULT_CHANNELS = [
 const DEFAULT_RSS_FEEDS = [
   'https://cointelegraph.com/rss',
   'https://www.coindesk.com/arc/outboundfeeds/rss/',
+  'https://www.newsbtc.com/feed/',
+  'https://cryptoslate.com/feeds/',
+  'https://cryptobriefing.com/feeds/',
+  'https://www.dlnews.com/rss/',
+  'https://thedefiant.io/api/feed',
+  'https://blog.coinlist.co/tag/defi/rss',
+  'https://blog.synthetix.io/rss',
+  'https://ritholtz.com/feed',
+  'https://econbrowser.com/feed',
+  'https://marginalrevolution.com/feed',
+];
+
+const DEFAULT_X_HANDLES = [
+  'WatcherGuru',
+  'Cointelegraph',
+  'CoinDesk',
+  'whale_alert',
+  'TheBlock__',
+  'Blockworks_',
+  'VitalikButerin',
+  'saylor',
+  'cz_binance',
 ];
 
 const DEFAULT_TEMPLATE = [
-  '⚡ عاجل {{NEWS}}',
+  '⚡ *عاجل*',
   '',
+  '{{NEWS}}',
   '',
-  '👻 ADMIN (https://t.me/g_h_o_s_t_14)|👿  𝐆𝐇𝐎𝐒𝐓 (https://t.me/CRGhosts21) | ✈️Alkatiba21 (https://t.me/Alkatiba21) | 💬Group (https://t.me/HETANCR22)| 🗯 Referral  (https://t.me/REFERRA21)| 🎥 youtube  (https://www.youtube.com/@GHOSTS21-CG)|💬Twitter (https://x.com/Ghost_818)|📸Instagram (https://www.instagram.com/mr1997art/)|📨 Share (https://t.me/share/url?url=https://t.me/Alkatiba21&text=Hey%20You)',
+  '[👻 ADMIN](https://t.me/g_h_o_s_t_14)|[👿  𝐆𝐇𝐎𝐒𝐓](https://t.me/CRGhosts21) | [✈️Alkatiba21](https://t.me/Alkatiba21) | [💬Group](https://t.me/HETANCR22)| [🗯 Referral](https://t.me/REFERRA21)| [🎥 youtube](https://www.youtube.com/@GHOSTS21-CG)|[💬Twitter](https://x.com/Ghost_818)|[📸Instagram](https://www.instagram.com/mr1997art/)|[📨 Share](https://t.me/share/url?url=https://t.me/Alkatiba21&text=Hey%20You)',
 ].join('\n');
 
 function cleanChannelName(input) {
@@ -45,10 +68,39 @@ function cleanTargetChannel(input) {
   return cleaned ? `@${cleaned}` : '';
 }
 
+function cleanXHandle(input) {
+  if (!input) return '';
+  const s = String(input).trim();
+  if (/^https?:\/\//i.test(s)) return s;
+  return s.replace(/^@+/, '').split('/')[0].split('?')[0].trim();
+}
+
+function stripLinksAndHandles(text) {
+  return String(text || '')
+    .replace(/https?:\/\/\S+/gi, '')
+    .replace(/www\.\S+/gi, '')
+    .replace(/t\.me\/\S+/gi, '')
+    .replace(/@[A-Za-z0-9_]+/g, '')
+    .replace(/[\*_`]+/g, '')
+    .replace(/[ \t]+/g, ' ')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
+
+function toBoldLines(text) {
+  const cleaned = stripLinksAndHandles(text);
+  if (!cleaned) return '';
+  return cleaned
+    .split('\n')
+    .map(line => line.trim())
+    .filter(Boolean)
+    .map(line => `*${line}*`)
+    .join('\n\n');
+}
+
 function newsHash(text) {
-  const norm = String(text || '')
+  const norm = stripLinksAndHandles(text)
     .toLowerCase()
-    .replace(/https?:\/\/\S+/g, '')
     .replace(/[^\p{L}\p{N}\s]+/gu, ' ')
     .replace(/\s+/g, ' ')
     .trim()
@@ -58,35 +110,29 @@ function newsHash(text) {
 
 function applyTemplate(template, body) {
   const tpl = template && String(template).trim() ? String(template) : DEFAULT_TEMPLATE;
-  const content = String(body || '').trim();
+  const boldContent = toBoldLines(body);
   if (/\{\{\s*NEWS\s*\}\}/i.test(tpl)) {
-    return tpl.replace(/\{\{\s*NEWS\s*\}\}/gi, content);
+    return tpl.replace(/\{\{\s*NEWS\s*\}\}/gi, boldContent);
   }
   const lines = tpl.split('\n');
   const mid = Math.max(1, Math.floor(lines.length / 2));
-  return [...lines.slice(0, mid), content, ...lines.slice(mid)].join('\n');
+  return [...lines.slice(0, mid), boldContent, ...lines.slice(mid)].join('\n');
 }
 
-function formatBilingualNews({ titleAr, titleEn, bodyAr, bodyEn, source, url, template }) {
-  const arHead = titleAr ? `📌 *${titleAr}*` : '📌 *تحديث عاجل*';
-  const enHead = titleEn ? `🌐 *${titleEn}*` : '🌐 *Market Update*';
-  const arBlock = bodyAr ? `${arHead}\n${bodyAr}` : arHead;
-  const enBlock = bodyEn ? `${enHead}\n${bodyEn}` : enHead;
-  const meta = [
-    source ? `📡 المصدر / Source: ${source}` : '',
-    url ? `🔗 ${url}` : '',
-  ]
-    .filter(Boolean)
-    .join('\n');
-
-  const combined = `${arBlock}\n\n${enBlock}${meta ? `\n\n${meta}` : ''}`;
-  return applyTemplate(template, combined);
+function formatCleanBilingualPost({ bodyAr, bodyEn, template }) {
+  const cleanAr = stripLinksAndHandles(bodyAr).slice(0, 550);
+  const cleanEn = stripLinksAndHandles(bodyEn).slice(0, 550);
+  const parts = [];
+  if (cleanAr) parts.push(cleanAr);
+  if (cleanEn && cleanEn.toLowerCase() !== cleanAr.toLowerCase()) parts.push(cleanEn);
+  const body = parts.join('\n');
+  return applyTemplate(template, body);
 }
 
 function formatPriceAlert(item, template) {
   const up = item.change24h >= 0;
-  const arrow = up ? '📈 ارتفاع' : '📉 انخفاض';
-  const arrowEn = up ? 'UP' : 'DOWN';
+  const dirAr = up ? 'ارتفاع' : 'انخفاض';
+  const dirEn = up ? 'UP' : 'DOWN';
   const sign = up ? '+' : '';
   const priceStr =
     item.price >= 1
@@ -94,29 +140,25 @@ function formatPriceAlert(item, template) {
       : Number(item.price).toFixed(6);
 
   const body = [
-    `${arrow} *${item.name} (${item.symbol})* — *${sign}${item.change24h.toFixed(2)}%* (24h)`,
-    `💵 السعر الحالي: *$${priceStr}*`,
-    '',
-    `📊 *${item.symbol} ${arrowEn} ${sign}${item.change24h.toFixed(2)}%* (24h)`,
-    `💵 Current Price: *$${priceStr}*`,
+    `${dirAr} ${item.name} (${item.symbol}) بنسبة ${sign}${item.change24h.toFixed(2)}% خلال 24 ساعة — السعر $${priceStr}`,
+    `${item.symbol} ${dirEn} ${sign}${item.change24h.toFixed(2)}% (24h) — Price $${priceStr}`,
   ].join('\n');
 
   return applyTemplate(template, body);
 }
 
-function escapeMarkdown(text) {
-  return String(text || '').replace(/([_*`\[])/g, '\\$1');
-}
-
 module.exports = {
   DEFAULT_CHANNELS,
   DEFAULT_RSS_FEEDS,
+  DEFAULT_X_HANDLES,
   DEFAULT_TEMPLATE,
   cleanChannelName,
   cleanTargetChannel,
+  cleanXHandle,
+  stripLinksAndHandles,
+  toBoldLines,
   newsHash,
   applyTemplate,
-  formatBilingualNews,
+  formatCleanBilingualPost,
   formatPriceAlert,
-  escapeMarkdown,
 };

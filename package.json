@@ -1,7 +1,7 @@
 {
   "name": "alkatiba-news-bot",
-  "version": "1.0.0",
-  "description": "Automated bilingual crypto news, events, and market alerts Telegram publisher",
+  "version": "1.2.0",
+  "description": "Bold text-only bilingual crypto news and market alerts Telegram bot",
   "main": "server.js",
   "scripts": {
     "start": "node server.js"
