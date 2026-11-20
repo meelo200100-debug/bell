@@ -31,7 +31,7 @@ button:active{transform:scale(.99)}
 .btn-sec{background:rgba(46,229,157,.12);color:var(--ac);border:1px solid var(--bd)}
 .btn-add{background:var(--ac);color:#04160f;padding:0 16px}
 input,select,textarea{width:100%;background:rgba(0,0,0,.32);border:1px solid var(--bd);border-radius:12px;color:var(--tx);font:13.5px/1.45 'Cairo','Sora',sans-serif;padding:10px 12px;outline:none}
-textarea{min-height:92px;resize:vertical}
+textarea{min-height:110px;resize:vertical}
 input:focus,select:focus,textarea:focus{border-color:var(--ac)}
 .list{margin-top:10px;display:flex;flex-direction:column;gap:7px}
 .item{display:flex;justify-content:space-between;align-items:center;background:rgba(255,255,255,.025);border:1px solid rgba(29,53,76,.7);border-radius:12px;padding:8px 11px;font-size:13px}
@@ -82,14 +82,14 @@ input:focus,select:focus,textarea:focus{border-color:var(--ac)}
 
   <section class="pane" id="p-sources">
     <div class="card">
-      <h2>إضافة مصدر أخبار أو قناة تليجرام أو X</h2>
+      <h2>إضافة مصدر أخبار أو قناة تليجرام أو حساب X</h2>
       <div class="row">
         <select id="srcType" style="max-width:140px">
           <option value="tg_channel">قناة تليجرام</option>
-          <option value="x_feed">تغذية X / تويتر</option>
+          <option value="x_account">حساب X / تويتر</option>
           <option value="rss">موقع أخبار (RSS)</option>
         </select>
-        <input id="srcVal" placeholder="@WatcherGuru أو رابط RSS / X">
+        <input id="srcVal" placeholder="@WatcherGuru أو رابط RSS">
         <button class="btn-add" id="btnAddSrc">إضافة</button>
       </div>
       <div class="list" id="srcList"></div>
@@ -100,7 +100,7 @@ input:focus,select:focus,textarea:focus{border-color:var(--ac)}
     <div class="card">
       <h2>قنوات النشر (عيّن البوت أدمن فيها)</h2>
       <div class="row">
-        <input id="tgtVal" placeholder="@YourChannel أو -100123456789">
+        <input id="tgtVal" placeholder="@Alkatiba21 أو -100123456789">
         <button class="btn-add" id="btnAddTgt">إضافة قناة</button>
       </div>
       <div class="list" id="tgtList"></div>
