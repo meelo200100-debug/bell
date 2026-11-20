@@ -36,6 +36,9 @@ input:focus,select:focus,textarea:focus{border-color:var(--ac)}
 .list{margin-top:10px;display:flex;flex-direction:column;gap:7px}
 .item{display:flex;justify-content:space-between;align-items:center;background:rgba(255,255,255,.025);border:1px solid rgba(29,53,76,.7);border-radius:12px;padding:8px 11px;font-size:13px}
 .tag{font-size:11px;padding:2px 8px;border-radius:99px;background:rgba(46,229,157,.12);color:var(--ac)}
+.item-main{display:flex;align-items:center;gap:8px;min-width:0;flex:1}
+.item-main span:first-child{overflow-wrap:anywhere}
+.btn-del{background:rgba(255,107,107,.12);color:#ff8f8f;border:1px solid rgba(255,107,107,.3);padding:4px 10px;min-width:32px;font-size:17px;line-height:1}
 .prices{display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin-top:8px}
 .pbox{background:rgba(0,0,0,.25);border:1px solid rgba(29,53,76,.7);border-radius:12px;padding:9px 11px;display:flex;justify-content:space-between;align-items:center}
 .up{color:var(--ac);font-weight:700;font-size:12.5px}
@@ -82,6 +85,7 @@ input:focus,select:focus,textarea:focus{border-color:var(--ac)}
     <div class="card">
       <h2>ماكيت / قالب النشر (ضع {{NEWS}} مكان الخبر)</h2>
       <textarea id="tplInput"></textarea>
+      <div class="mini">الإيموجي المميزة من تيليجرام: أضفها داخل القالب بهذا الشكل: <b dir="ltr">{{TG_EMOJI:1234567890123456789|⭐}}</b> — لاستخراج المعرّف: أرسل الإيموجي المميزة للبوت من حسابك، وسيعيد لك الكود جاهزاً. يمكنك تكرار الكود في أي مكان بالقالب.</div>
       <button class="btn-on" id="btnSaveTpl" style="width:100%;margin-top:8px">💾 حفظ القالب</button>
     </div>
   </section>
@@ -166,7 +170,9 @@ async function api(path, body) {
   if (!tg || !tg.initData) { const e = new Error('no_telegram'); e.code = 'no_telegram'; throw e; }
   const headers = { 'x-init': tg.initData };
   if (body) headers['Content-Type'] = 'application/json';
-  const r = await fetch('/api' + path, { method: body ? 'POST' : 'GET', headers, body: body ? JSON.stringify(body) : undefined });
+  const method = body && body._method ? body._method : (body ? 'POST' : 'GET');
+  const payload = body && body._method ? Object.fromEntries(Object.entries(body).filter(([k]) => k !== '_method')) : body;
+  const r = await fetch('/api' + path, { method, headers, body: body ? JSON.stringify(payload) : undefined });
   let j = {};
   try { j = await r.json(); } catch (e) { /* empty body */ }
   if (!r.ok) { const e = new Error(j.error || 'http ' + r.status); e.code = j.error || (r.status === 401 ? 'unauthorized' : 'server'); throw e; }
@@ -185,8 +191,15 @@ function render(s) {
   banner(s.lastError ? 'آخر خطأ: ' + s.lastError : '', true);
 
   $('srcList').innerHTML = (s.sources || []).map(x =>
-    `<div class="item"><span dir="ltr">${esc(x.value)}</span><span class="tag">${esc(x.type)}</span></div>`
+    `<div class="item"><div class="item-main"><span dir="ltr">${esc(x.value)}</span><span class="tag">${esc(x.type)}</span></div><button class="btn-del" type="button" title="حذف المصدر" aria-label="حذف المصدر" data-source-id="${Number(x.id)}">×</button></div>`
   ).join('') || '<small>لا توجد مصادر بعد</small>';
+  $('srcList').querySelectorAll('[data-source-id]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const id = Number(btn.dataset.sourceId);
+      if (!Number.isSafeInteger(id) || id <= 0) return;
+      if (confirm('هل تريد حذف هذا المصدر نهائياً؟')) act(() => api('/sources/' + id, { _method: 'DELETE' }), 'تم حذف المصدر');
+    });
+  });
 
   $('tgtList').innerHTML = (s.targets || []).map(x =>
     `<div class="item"><span dir="ltr">${esc(x.chat_id)}</span><span class="tag">نشر نشط</span></div>`
