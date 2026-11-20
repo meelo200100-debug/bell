@@ -109,16 +109,32 @@ function stripLinksAndHandles(text, sourceName = '') {
     .replace(/\b[a-z0-9-]+\.(?:com|net|org|io|co|news|me|xyz|tv|app|info|biz|ai)\/\S*/gi, '')
     .replace(/@[A-Za-z0-9_]+/g, '');
 
+  // 2b. Remove any remaining URLs/links/domains even if separated by spaces/punctuation
+  cleaned = cleaned
+    .replace(/(?:https?:\/\/)?[\w.-]+\.[a-z]{2,}(?:\/[^\s\n]*)?/gi, match => {
+      // Keep decimal numbers like 1.5 or $0.05 (only remove if followed by slash or known TLD)
+      if (/^\d+\.\d+$/.test(match)) return match;
+      return '';
+    });
+
   // 3. Remove common source attribution lines & prefixes/suffixes (Arabic & English)
   cleaned = cleaned
     // Standalone or trailing attribution lines: المصدر: ... / منقول من ... / عبر ... / قناة ... / جروب ... / موقع ... / Source: ... / Via ...
-    .replace(/(?:^|\n)\s*(?:📌|🔗|📰|📢|📣|📡|•|-|—|–|\|)?\s*(?:المصدر|منقول\s*من|نقل[ااً]\s*عن|عبر|بواسطة|تابعونا\s*على|اشترك\s*في|للمزيد|قراءة\s*المزيد|اقرأ\s*المزيد|المقال\s*الأصلي|source|via|credit|read\s*more|full\s*story|originally\s*published)\s*[:\-–—|]?\s*[^\n]*/gi, '')
-    // Channel / Group / Site signature lines (e.g., "قناة كريبتو نيوز", "جروب ...", "موقع ...")
-    .replace(/(?:^|\n)\s*(?:📌|🔗|📰|📢|📣|📡|⚡|🔴|🟢|🔵|•|-|—|–|\|)?\s*(?:قناة|جروب|مجموعة|شبكة|صحيفة|موقع|منصة)\s+[^\n]{2,60}\s*(?=\n|$)/gi, '')
-    // Trailing pipe/dash source suffixes on a line (e.g., "... | قناة كريبتو نيوز" or "... - CoinTelegraph" or "... — WatcherGuru")
-    .replace(/\s*[\|—–]\s*(?:قناة|جروب|موقع|شبكة)?\s*[\p{L}\p{N}_ .-]{2,45}$/gmu, '')
+    .replace(/(?:^|\n)\s*(?:📌|🔗|📰|📢|📣|📡|📍|🏷️|🏷|🏪|🏬|🏛️|🏛|🌐|💎|🚀|🔥|⚡|⚡️|•|-|—|–|\|)?\s*(?:المصدر|منقول\s*من|نقل[ااً]\s*عن|عبر|بواسطة|تابعونا\s*على|اشترك\s*في|للمزيد|قراءة\s*المزيد|اقرأ\s*المزيد|المقال\s*الأصلي|source|via|credit|read\s*more|full\s*story|originally\s*published)\s*[:\-–—|]?\s*[^\n]*/gi, '')
+    // Channel / Group / Site signature lines anywhere in text (e.g., "قناة كريبتو نيوز", "جروب ...", "موقع ...")
+    .replace(/(?:^|\n)\s*(?:📌|🔗|📰|📢|📣|📡|🏪|🏬|🌐|⚡|⚡️|🔴|🟢|🔵|•|-|—|–|\|)?\s*(?:قناة|جروب|مجموعة|شبكة|صحيفة|موقع|منصة)\s+[^\n]{2,70}(?=\n|$)/gi, '')
+    // Trailing pipe/dash/slash source suffixes on a line (e.g., "... | قناة كريبتو نيوز" or "... - CoinTelegraph")
+    .replace(/\s*[\|—–\/]+\s*(?:قناة|جروب|موقع|شبكة)?\s*[\p{L}\p{N}_ .-]{2,50}$/gmu, '')
     // Leading channel/site tag with colon (e.g., "قناة كريبتو نيوز: ..." or "كريبتو نيوز:")
-    .replace(/^\s*(?:قناة|جروب|موقع|شبكة)\s+[^\n:]{2,40}\s*:\s*/gmi, '');
+    .replace(/^\s*(?:قناة|جروب|موقع|شبكة)\s+[^\n:]{2,45}\s*:\s*/gmi, '')
+    // Trailing short signature line at the very end of the post starting with an emoji or symbol (e.g., "🏪 كربتو نيوز", "📢 كريبتو نيوز", "🔹 Watcher Guru")
+    .replace(/\n+\s*(?:[\p{Extended_Pictographic}\uFE0F\u200D•\-—–|]+\s*)+[\p{L}\p{N}_ .-]{2,40}\s*$/gu, '')
+    // Trailing short brand/channel name line at the very end (2 to 4 words, no sentence-ending punctuation, preceded by blank line)
+    .replace(/\n{2,}\s*(?:[\p{Extended_Pictographic}\uFE0F\u200D]+\s*)?(?:[\p{L}\p{N}_-]+\s+){0,3}[\p{L}\p{N}_-]+\s*$/gu, match => {
+      // Only strip if it does NOT contain numbers/prices/percentages (so real news lines with numbers are preserved)
+      if (/\d|%|\$|دولار|ألف|مليون|مليار/.test(match)) return match;
+      return '';
+    });
 
   // 4. Clean Markdown-breaking characters and normalize whitespace
   return cleaned
@@ -195,13 +211,42 @@ function applyTemplate(template, body) {
   return [...lines.slice(0, mid), boldContent, ...lines.slice(mid)].join('\n');
 }
 
-// bodyAr = Arabic version (or the original when there is no translation), bodyEn = the original text.
-function formatCleanBilingualPost({ bodyAr, bodyEn, template, sourceName = '' }) {
-  const cleanAr = truncate(stripLinksAndHandles(bodyAr, sourceName), 550);
-  const cleanEn = truncate(stripLinksAndHandles(bodyEn, sourceName), 550);
+// Polishes machine-translated Arabic into natural, professional crypto & financial journalism Arabic.
+function polishArabicTranslation(text) {
+  let s = String(text || '').trim();
+  if (!s) return '';
+  const replacements = [
+    [/\bبيتكوين\b/g, 'البيتكوين'],
+    [/\bإيثيريوم\b|\bايثريوم\b/g, 'الإيثيريوم'],
+    [/\bسولانا\b/g, 'سولانا'],
+    [/\bعملة مشفرة\b/g, 'عملة رقمية'],
+    [/\bعملات مشفرة\b/g, 'عملات رقمية'],
+    [/\bالعملات المشفرة\b/g, 'العملات الرقمية'],
+    [/\bتشفير\b/g, 'كريبتو'],
+    [/\bالاحتياطي الفيدرالي\b/g, 'الاحتياطي الفيدرالي الأمريكي'],
+    [/\bلجنة الأوراق المالية والبورصات\b/g, 'هيئة الأوراق المالية والبورصات الأمريكية (SEC)'],
+    [/\bصندوق الاستثمار المتداول\b/g, 'صندوق المؤشرات المتداول (ETF)'],
+    [/\bصناديق الاستثمار المتداولة\b/g, 'صناديق المؤشرات المتداولة (ETF)'],
+    [/\bحيتان\b/g, 'حيتان السوق'],
+    [/\bارتفاع حاد\b/g, 'قفزة قوية'],
+    [/\s+([،.؛:!؟])/g, '$1'],
+    [/([،؛:])([^\s\n\d])/g, '$1 $2'],
+  ];
+  for (const [rx, val] of replacements) {
+    s = s.replace(rx, val);
+  }
+  return s.replace(/[ \t]+/g, ' ').replace(/\n{3,}/g, '\n\n').trim();
+}
+
+// bodyAr = Arabic version (or the original when translation is unavailable), bodyEn = original English text.
+function formatCleanBilingualPost({ bodyAr, bodyEn, template, sourceName = '', bilingual = false }) {
+  const cleanAr = truncate(stripLinksAndHandles(bodyAr, sourceName), 750);
+  const cleanEn = truncate(stripLinksAndHandles(bodyEn, sourceName), 750);
   const parts = [];
   if (cleanAr) parts.push(cleanAr);
-  if (cleanEn && cleanEn.toLowerCase() !== cleanAr.toLowerCase()) parts.push(cleanEn);
+  if (bilingual && cleanEn && cleanEn.toLowerCase() !== cleanAr.toLowerCase()) {
+    parts.push(cleanEn);
+  }
   return applyTemplate(template, parts.join('\n'));
 }
 
@@ -240,5 +285,5 @@ module.exports = {
   DEFAULT_CHANNELS, DEFAULT_RSS_FEEDS, DEFAULT_X_HANDLES, DEFAULT_TEMPLATE, DEFAULT_PROMO,
   cleanChannelName, cleanTargetChannel, cleanXHandle, cleanFeedUrl,
   stripLinksAndHandles, toBoldLines, newsHash, hasContent, truncate, isArabic, isPromo, parseDate,
-  applyTemplate, formatCleanBilingualPost, formatPriceAlert, verifyInitData,
+  applyTemplate, polishArabicTranslation, formatCleanBilingualPost, formatPriceAlert, verifyInitData,
 };

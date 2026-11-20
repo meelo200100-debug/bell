@@ -9,6 +9,8 @@ function decodeHtml(str) {
   const tags = /<\/?[a-z][^>]*>/gi;
   return String(str || '')
     .replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, '$1')
+    // Remove entire <a>...</a> tags that link to Telegram, X/Twitter, or external channel/source URLs
+    .replace(/<a\b[^>]*href=["']https?:\/\/[^"']*["'][^>]*>[\s\S]*?<\/a>/gi, ' ')
     .replace(/<br\s*\/?>/gi, '\n')
     .replace(/<\/p>/gi, '\n')
     .replace(tags, ' ')
@@ -161,18 +163,56 @@ function createCore({ db, bot, cfg, fetchFn = fetch, sleep = ms => new Promise(r
         : s.type === 'x_account' ? fetchXAccount(s.value) : Promise.resolve([])
   );
 
-  // Optional translation to Arabic through a LibreTranslate-compatible server. Any failure falls back to the original text.
+  // Professional automatic translation to Arabic (supports LibreTranslate if configured + built-in fallback translators).
   async function translateToArabic(text) {
-    if (!cfg.translateUrl) return null;
+    const cleanInput = String(text || '').trim();
+    if (!cleanInput) return null;
+
+    // 1. Custom LibreTranslate server if configured
+    if (cfg.translateUrl) {
+      try {
+        const r = await fetchFn(`${cfg.translateUrl.replace(/\/$/, '')}/translate`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' }, signal: AbortSignal.timeout(8000),
+          body: JSON.stringify({ q: cleanInput, source: 'auto', target: 'ar', format: 'text', ...(cfg.translateKey ? { api_key: cfg.translateKey } : {}) }),
+        });
+        if (r.ok) {
+          const j = await r.json();
+          if (typeof j.translatedText === 'string' && j.translatedText.trim()) {
+            return L.polishArabicTranslation(j.translatedText);
+          }
+        }
+      } catch (_) {}
+    }
+
+    // 2. Built-in free neural translation (Google GTX endpoint - works immediately with zero API keys)
     try {
-      const r = await fetchFn(`${cfg.translateUrl.replace(/\/$/, '')}/translate`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' }, signal: AbortSignal.timeout(8000),
-        body: JSON.stringify({ q: text, source: 'auto', target: 'ar', format: 'text', ...(cfg.translateKey ? { api_key: cfg.translateKey } : {}) }),
-      });
-      if (!r.ok) return null;
-      const j = await r.json();
-      return typeof j.translatedText === 'string' && j.translatedText.trim() ? j.translatedText : null;
-    } catch (e) { return null; }
+      const url = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=ar&dt=t&q=${encodeURIComponent(cleanInput)}`;
+      const r = await fetchFn(url, { headers: UA, signal: AbortSignal.timeout(8000) });
+      if (r.ok) {
+        const data = await r.json();
+        if (Array.isArray(data && data[0])) {
+          const translated = data[0].map(seg => (seg && seg[0]) || '').join('').trim();
+          if (translated && L.isArabic(translated)) {
+            return L.polishArabicTranslation(translated);
+          }
+        }
+      }
+    } catch (_) {}
+
+    // 3. Secondary fallback (MyMemory Translation API)
+    try {
+      const url = `https://api.mymemory.translated.net/get?q=${encodeURIComponent(cleanInput.slice(0, 480))}&langpair=en|ar`;
+      const r = await fetchFn(url, { headers: UA, signal: AbortSignal.timeout(8000) });
+      if (r.ok) {
+        const j = await r.json();
+        const translated = j && j.responseData && j.responseData.translatedText;
+        if (typeof translated === 'string' && translated.trim() && L.isArabic(translated)) {
+          return L.polishArabicTranslation(translated);
+        }
+      }
+    } catch (_) {}
+
+    return null;
   }
 
   // ---------- sending ----------
@@ -224,11 +264,13 @@ function createCore({ db, bot, cfg, fetchFn = fetch, sleep = ms => new Promise(r
       return { symbol: c.symbol, name: c.name, price: Number(row.usd || 0), change24h: Number(row.usd_24h_change || 0) };
     });
     let published = 0;
+    const postDelayMs = Math.max(0, Number(cfg.postDelayMs ?? 5000));
     for (const item of latestPrices) {
       if (!item.price || Math.abs(item.change24h) < cfg.priceThreshold) continue;
       const bucket = Math.floor(now() / (4 * 3600 * 1000));
       const h = L.newsHash(`price:${item.symbol}:${item.change24h >= 0 ? 'up' : 'down'}:${bucket}`);
       if (first(await run('SELECT 1 FROM posted_items WHERE hash=?', [h]))) continue;
+      if (published > 0 && postDelayMs > 0) await sleep(postDelayMs);
       const r = await publish(L.formatPriceAlert(item, template), targets);
       if (!r.done) break;
       await run('INSERT OR IGNORE INTO posted_items(hash, source, title, posted_at) VALUES(?, ?, ?, ?)', [h, 'market', item.symbol, now()]);
@@ -267,9 +309,14 @@ function createCore({ db, bot, cfg, fetchFn = fetch, sleep = ms => new Promise(r
       picked.reverse(); // newest last, so the channel reads in order
 
       let published = 0;
-      for (const it of picked) {
-        const ar = L.isArabic(it.text) ? it.text : ((await translateToArabic(it.text.slice(0, 550))) || it.text);
-        const r = await publish(L.formatCleanBilingualPost({ bodyAr: ar, bodyEn: it.text, template, sourceName: it.sourceTitle || it.source || '' }), targets);
+      const postDelayMs = Math.max(0, Number(cfg.postDelayMs ?? 5000));
+      for (let idx = 0; idx < picked.length; idx++) {
+        if (idx > 0 && postDelayMs > 0) {
+          await sleep(postDelayMs);
+        }
+        const it = picked[idx];
+        const ar = L.isArabic(it.text) ? it.text : ((await translateToArabic(it.text.slice(0, 800))) || it.text);
+        const r = await publish(L.formatCleanBilingualPost({ bodyAr: ar, bodyEn: it.text, template, sourceName: it.sourceTitle || it.source || '', bilingual: !!cfg.bilingual }), targets);
         if (!r.done) { lastError = `Telegram unreachable: ${r.error}`; break; }
         await run('INSERT OR IGNORE INTO posted_items(hash, source, title, posted_at) VALUES(?, ?, ?, ?)', [it.h, it.source || 'feed', it.text.slice(0, 120), now()]);
         if (r.ok) published++; else lastError = `Could not post to any channel: ${r.error}`;
@@ -316,7 +363,7 @@ function createCore({ db, bot, cfg, fetchFn = fetch, sleep = ms => new Promise(r
         running: isRunning, busy: cycleRunning, lastCycleAt, lastError,
         publishedCount: Number((first(posted) || {}).c || 0), template,
         sources: sources.rows || [], targets: targets.rows || [], prices: latestPrices,
-        xEnabled: cfg.nitterHosts.length > 0, translateEnabled: !!cfg.translateUrl, adFilter: cfg.adFilter,
+        xEnabled: cfg.nitterHosts.length > 0, translateEnabled: true, adFilter: cfg.adFilter,
       });
     },
     toggle: async (req, res) => { await setEnabledState(Boolean(req.body && req.body.running)); res.json({ ok: true, running: isRunning }); },

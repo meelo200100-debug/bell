@@ -26,6 +26,8 @@ const cfg = {
   adExtra: list(env.AD_KEYWORDS_EXTRA),
   maxAgeMs: num(env.MAX_AGE_HOURS, 12, 1) * 3600 * 1000,
   maxPerCycle: num(env.MAX_PER_CYCLE, 5, 1),
+  postDelayMs: num(env.POST_DELAY_MS, 5000, 0),
+  bilingual: env.BILINGUAL === '1',
   priceThreshold: num(env.PRICE_THRESHOLD_PCT, 3, 0.5),
   initMaxAgeSec: 3 * 86400,
 };
