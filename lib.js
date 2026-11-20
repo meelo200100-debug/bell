@@ -1,7 +1,4 @@
 const crypto = require('crypto');
-const dns = require('dns').promises;
-const https = require('https');
-const http = require('http');
 
 const DEFAULT_CHANNELS = [
   'Crypto_News95',
@@ -65,11 +62,13 @@ const cleanSlug = s => String(s || '').trim()
   .replace(/^https?:\/\/(t\.me|telegram\.me)\/(s\/)?/i, '')
   .replace(/^@+/, '').split('/')[0].split('?')[0].trim();
 
+// Telegram channel to READ from (username only).
 function cleanChannelName(input) {
   const s = cleanSlug(input);
   return /^[A-Za-z0-9_]{5,32}$/.test(s) ? s : '';
 }
 
+// Chat to POST to: numeric id or @username.
 function cleanTargetChannel(input) {
   const raw = String(input || '').trim();
   if (/^-?\d{5,20}$/.test(raw)) return raw;
@@ -84,150 +83,87 @@ function cleanXHandle(input) {
   return /^[A-Za-z0-9_]{1,30}$/.test(h) ? h : '';
 }
 
-function isPrivateOrReservedIp(ip) {
-  if (!ip) return true;
-  const s = String(ip).toLowerCase().replace(/^\[|\]$/g, '');
-  const mapped = s.match(/^::ffff:(\d+\.\d+\.\d+\.\d+)$/i);
-  const check = mapped ? mapped[1] : s;
-  // only treat as IP if it looks like one
-  if (!/^\d+\.\d+\.\d+\.\d+$/.test(check) && !/^[0-9a-f:]+$/i.test(check)) return false;
-  if (/^127\./.test(check) || check === '0.0.0.0' || check === '::1' || check === '::') return true;
-  if (/^10\./.test(check) || /^192\.168\./.test(check) || /^169\.254\./.test(check)) return true;
-  if (/^172\.(1[6-9]|2\d|3[01])\./.test(check)) return true;
-  if (/^100\.(6[4-9]|[7-9]\d|1[01]\d|12[0-7])\./.test(check)) return true; // CGNAT
-  if (check.startsWith('fc') || check.startsWith('fd') || check.startsWith('fe80:') || check.startsWith('ff')) return true;
-  if (check === '169.254.169.254' || check === 'fd00:ec2::254') return true; // metadata
-  return false;
-}
-
-function isSafeRemoteUrl(input) {
-  let u;
-  try { u = new URL(String(input || '').trim()); } catch (_) { return false; }
-  if (!/^https?:$/.test(u.protocol) || u.username || u.password || !u.hostname) return false;
-  const host = u.hostname.toLowerCase().replace(/^\[|\]$/g, '').replace(/\.$/, '');
-  if (!host || host === 'localhost' || host === 'localhost.localdomain' || host.endsWith('.local') || host.endsWith('.internal') || host.endsWith('.localhost')) return false;
-  if (host === 'metadata.google.internal' || host === 'metadata' || host.endsWith('.metadata')) return false;
-  // reject literal IPs that are private/reserved, including non-standard forms
-  if (isPrivateOrReservedIp(host)) return false;
-  if (/^(0|127|10|192\.168|169\.254)\./.test(host)) return false;
-  if (/^172\.(1[6-9]|2\d|3[01])\./.test(host)) return false;
-  if (host.includes('%') || host.includes('::ffff:') && isPrivateOrReservedIp(host)) return false;
-  return true;
-}
-
 function cleanFeedUrl(input) {
   const s = String(input || '').trim();
   return isSafeRemoteUrl(s) && s.length <= 500 ? s : '';
 }
 
-async function resolveAndCheckHost(hostname) {
-  const host = String(hostname || '').toLowerCase().replace(/^\[|\]$/g, '');
-  if (isPrivateOrReservedIp(host) || !isSafeRemoteUrl(`http://${host}`)) {
-    throw new Error('unsafe_host');
-  }
-  const ips = [];
-  try {
-    const v4 = await dns.resolve4(host).catch(() => []);
-    const v6 = await dns.resolve6(host).catch(() => []);
-    ips.push(...v4, ...v6);
-  } catch (_) {}
-  if (!ips.length) {
-    try {
-      const looked = await dns.lookup(host, { all: true });
-      ips.push(...looked.map(x => x.address));
-    } catch (_) {}
-  }
-  if (!ips.length) throw new Error('dns_failed');
-  for (const ip of ips) {
-    if (isPrivateOrReservedIp(ip)) throw new Error('private_ip');
-  }
-  return ips;
+// Reject URLs that could target local/cloud metadata services if an admin session is compromised.
+function isSafeRemoteUrl(input) {
+  let u;
+  try { u = new URL(String(input || '').trim()); } catch (_) { return false; }
+  if (!/^https?:$/.test(u.protocol) || u.username || u.password || !u.hostname) return false;
+  const host = u.hostname.toLowerCase().replace(/^\[|\]$/g, '').replace(/\.$/, '');
+  if (host === 'localhost' || host === 'localhost.localdomain' || host.endsWith('.local') || host.endsWith('.internal')) return false;
+  if (/^(0|127|10|192\.168|169\.254)\./.test(host)) return false;
+  if (/^172\.(1[6-9]|2\d|3[01])\./.test(host)) return false;
+  if (host === '::1' || host.startsWith('fc') || host.startsWith('fd') || host.startsWith('fe80:')) return false;
+  return true;
 }
 
-function makePinnedRequest(urlStr, ip, options = {}) {
-  return new Promise((resolve, reject) => {
-    const u = new URL(urlStr);
-    const lib = u.protocol === 'https:' ? https : http;
-    const req = lib.request({
-      hostname: ip,
-      port: u.port || (u.protocol === 'https:' ? 443 : 80),
-      path: u.pathname + u.search,
-      method: options.method || 'GET',
-      headers: { ...(options.headers || {}), host: u.host },
-      servername: u.hostname,
-      timeout: options.timeoutMs || 12000,
-    }, (res) => {
-      const chunks = [];
-      res.on('data', c => chunks.push(c));
-      res.on('end', () => {
-        const body = Buffer.concat(chunks);
-        resolve({
-          ok: res.statusCode >= 200 && res.statusCode < 300,
-          status: res.statusCode,
-          headers: { get: (k) => res.headers[String(k).toLowerCase()] || null },
-          text: async () => body.toString('utf8'),
-          json: async () => JSON.parse(body.toString('utf8')),
-        });
-      });
-    });
-    req.on('error', reject);
-    req.on('timeout', () => { req.destroy(); reject(new Error('timeout')); });
-    if (options.body) req.write(options.body);
-    req.end();
-  });
-}
-
-async function safeFetch(url, options = {}, fetchImpl = fetch) {
-  let current;
-  try { current = new URL(String(url)); } catch (_) { throw new Error('invalid_url'); }
-  if (!isSafeRemoteUrl(current.href)) throw new Error('unsafe_url');
-  const maxRedirects = 3;
-  const useInjected = fetchImpl && fetchImpl !== fetch;
-  for (let i = 0; i <= maxRedirects; i++) {
-    const ips = await resolveAndCheckHost(current.hostname);
-    const ip = ips[0];
-    let res;
-    if (useInjected) {
-      res = await fetchImpl(current.href, { ...options, redirect: 'manual' });
-    } else {
-      res = await makePinnedRequest(current.href, ip, options);
-    }
-    if (res.status >= 300 && res.status < 400) {
-      const loc = res.headers.get('location');
-      if (!loc || i === maxRedirects) throw new Error('bad_redirect');
-      const next = new URL(loc, current);
-      if (!isSafeRemoteUrl(next.href)) throw new Error('unsafe_redirect');
-      current = next;
-      continue;
-    }
-    return res;
-  }
-  throw new Error('too_many_redirects');
-}
-
+// Removes links, @handles, source attributions (channel/group/site names), and Markdown-breaking characters.
 function stripLinksAndHandles(text, sourceName = '') {
   let cleaned = String(text || '');
 
-  // Remove only clear full URLs and handles, not partial words
-  cleaned = cleaned
-    .replace(/https?:\/\/\S+/gi, ' ')
-    .replace(/www\.\S+/gi, ' ')
-    .replace(/\b(?:t|telegram)\.me\/\S+/gi, ' ')
-    .replace(/\b(?:x|twitter)\.com\/\S+/gi, ' ')
-    .replace(/\b[a-z0-9-]+\.(?:com|net|org|io|co|news|me|xyz|tv|app|info|biz|ai)\/\S*/gi, ' ')
-    .replace(/(^|\s)@[A-Za-z0-9_]+\b/g, '$1');
-
-  // Attribution lines only (whole line)
-  cleaned = cleaned
-    .replace(/(?:^|\n)\s*(?:📌|🔗|📰|📢|📣|📡|📍|🏷️|🏷|🏪|🏬|🏛️|🏛|🌐|💎|🚀|🔥|⚡|⚡️|•|-|—|–|\|)?\s*(?:المصدر|منقول\s*من|نقل[ااً]\s*عن|عبر|بواسطة|تابعونا\s*على|اشترك\s*في|للمزيد|قراءة\s*المزيد|اقرأ\s*المزيد|المقال\s*الأصلي|source|via|credit|read\s*more|full\s*story|originally\s*published)\s*[:\-–—|]?\s*[^\n]*/gi, '')
-    .replace(/(?:^|\n)\s*(?:قناة|جروب|مجموعة|شبكة|صحيفة|موقع|منصة)\s+[^\n]{2,60}(?=\n|$)/gi, '');
-
-  // Only remove exact whole-word source name if short and not containing numbers
-  if (sourceName && String(sourceName).trim().length >= 3 && String(sourceName).trim().length <= 40 && !/\d/.test(sourceName)) {
-    const esc = String(sourceName).trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    cleaned = cleaned.replace(new RegExp(`(?:^|\\s)${esc}(?:\\s|$)`, 'gi'), ' ');
+  // 1. Remove explicit source name / channel / site domain if provided
+  if (sourceName && String(sourceName).trim()) {
+    const rawSrc = String(sourceName).trim();
+    const candidates = new Set([rawSrc]);
+    if (/^https?:\/\//i.test(rawSrc)) {
+      try {
+        const u = new URL(rawSrc);
+        const host = u.hostname.replace(/^www\./i, '');
+        candidates.add(host);
+        const base = host.split('.')[0];
+        if (base && base.length >= 3) candidates.add(base);
+      } catch (_) {}
+    } else {
+      const slug = rawSrc.replace(/^@+/, '').trim();
+      if (slug) candidates.add(slug);
+    }
+    for (const c of candidates) {
+      const esc = c.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      cleaned = cleaned.replace(new RegExp(esc, 'gi'), '');
+    }
   }
 
+  // 2. Remove all URLs / domains / t.me / x.com / twitter.com / telegram.me links
+  cleaned = cleaned
+    .replace(/https?:\/\/\S+/gi, '')
+    .replace(/www\.\S+/gi, '')
+    .replace(/\b(?:t|telegram)\.me\/\S+/gi, '')
+    .replace(/\b(?:x|twitter)\.com\/\S+/gi, '')
+    .replace(/\b[a-z0-9-]+\.(?:com|net|org|io|co|news|me|xyz|tv|app|info|biz|ai)\/\S*/gi, '')
+    .replace(/@[A-Za-z0-9_]+/g, '');
+
+  // 2b. Remove any remaining URLs/links/domains even if separated by spaces/punctuation
+  cleaned = cleaned
+    .replace(/(?:https?:\/\/)?[\w.-]+\.[a-z]{2,}(?:\/[^\s\n]*)?/gi, match => {
+      // Keep decimal numbers like 1.5 or $0.05 (only remove if followed by slash or known TLD)
+      if (/^\d+\.\d+$/.test(match)) return match;
+      return '';
+    });
+
+  // 3. Remove common source attribution lines & prefixes/suffixes (Arabic & English)
+  cleaned = cleaned
+    // Standalone or trailing attribution lines: المصدر: ... / منقول من ... / عبر ... / قناة ... / جروب ... / موقع ... / Source: ... / Via ...
+    .replace(/(?:^|\n)\s*(?:📌|🔗|📰|📢|📣|📡|📍|🏷️|🏷|🏪|🏬|🏛️|🏛|🌐|💎|🚀|🔥|⚡|⚡️|•|-|—|–|\|)?\s*(?:المصدر|منقول\s*من|نقل[ااً]\s*عن|عبر|بواسطة|تابعونا\s*على|اشترك\s*في|للمزيد|قراءة\s*المزيد|اقرأ\s*المزيد|المقال\s*الأصلي|source|via|credit|read\s*more|full\s*story|originally\s*published)\s*[:\-–—|]?\s*[^\n]*/gi, '')
+    // Channel / Group / Site signature lines anywhere in text (e.g., "قناة كريبتو نيوز", "جروب ...", "موقع ...")
+    .replace(/(?:^|\n)\s*(?:📌|🔗|📰|📢|📣|📡|🏪|🏬|🌐|⚡|⚡️|🔴|🟢|🔵|•|-|—|–|\|)?\s*(?:قناة|جروب|مجموعة|شبكة|صحيفة|موقع|منصة)\s+[^\n]{2,70}(?=\n|$)/gi, '')
+    // Trailing pipe/dash/slash source suffixes on a line (e.g., "... | قناة كريبتو نيوز" or "... - CoinTelegraph")
+    .replace(/\s*[\|—–\/]+\s*(?:قناة|جروب|موقع|شبكة)?\s*[\p{L}\p{N}_ .-]{2,50}$/gmu, '')
+    // Leading channel/site tag with colon (e.g., "قناة كريبتو نيوز: ..." or "كريبتو نيوز:")
+    .replace(/^\s*(?:قناة|جروب|موقع|شبكة)\s+[^\n:]{2,45}\s*:\s*/gmi, '')
+    // Trailing short signature line at the very end of the post starting with an emoji or symbol (e.g., "🏪 كربتو نيوز", "📢 كريبتو نيوز", "🔹 Watcher Guru")
+    .replace(/\n+\s*(?:[\p{Extended_Pictographic}\uFE0F\u200D•\-—–|]+\s*)+[\p{L}\p{N}_ .-]{2,40}\s*$/gu, '')
+    // Trailing short brand/channel name line at the very end (2 to 4 words, no sentence-ending punctuation, preceded by blank line)
+    .replace(/\n{2,}\s*(?:[\p{Extended_Pictographic}\uFE0F\u200D]+\s*)?(?:[\p{L}\p{N}_-]+\s+){0,3}[\p{L}\p{N}_-]+\s*$/gu, match => {
+      // Only strip if it does NOT contain numbers/prices/percentages (so real news lines with numbers are preserved)
+      if (/\d|%|\$|دولار|ألف|مليون|مليار/.test(match)) return match;
+      return '';
+    });
+
+  // 4. Clean Markdown-breaking characters and normalize whitespace
   return cleaned
     .replace(/[\*_`\[\]\\]+/g, '')
     .replace(/[ \t]+/g, ' ')
@@ -306,23 +242,24 @@ function newsSignals(text) {
   return { assets, direction, numbers };
 }
 
+// Conservative semantic duplicate check for differently worded reports.
 function areSimilarNews(a, b) {
   const sa = newsSignals(a), sb = newsSignals(b);
   const sharedAssets = sa.assets.filter(x => sb.assets.includes(x));
   const sharedNumbers = sa.numbers.filter(x => sb.numbers.includes(x));
+  if (sharedAssets.length && sa.direction && sa.direction === sb.direction && sharedNumbers.length) return true;
   const ta = normalizedNewsTokens(a), tb = normalizedNewsTokens(b);
-  if (ta.size < 4 || tb.size < 4) return false;
+  if (ta.size < 3 || tb.size < 3) return false;
   const intersection = [...ta].filter(x => tb.has(x)).length;
   const union = new Set([...ta, ...tb]).size;
   const jaccard = union ? intersection / union : 0;
-  // Require strong textual overlap; shared asset+direction+number alone is not enough
-  if (sharedAssets.length && sa.direction && sa.direction === sb.direction && sharedNumbers.length && jaccard >= 0.55) return true;
-  if (sharedAssets.length && sa.direction && sa.direction === sb.direction && jaccard >= 0.65) return true;
-  return jaccard >= 0.78;
+  if (sharedAssets.length && sa.direction && sa.direction === sb.direction && jaccard >= 0.45) return true;
+  return jaccard >= 0.72;
 }
 
 const hasContent = text => /[\p{L}\p{N}]/u.test(stripLinksAndHandles(text));
 
+// Cuts on a word boundary (by code points, so emoji are never split).
 function truncate(s, n) {
   const cps = [...String(s || '')];
   if (cps.length <= n) return cps.join('');
@@ -351,22 +288,9 @@ function isPromo(text, extra = []) {
   return DEFAULT_PROMO.concat(extra).some(k => k && t.includes(String(k).toLowerCase()));
 }
 
-function parseDate(s) {
-  const raw = String(s || '').trim();
-  if (!raw) return null;
-  // Prefer explicit ISO / RFC822
-  let t = Date.parse(raw);
-  if (!Number.isFinite(t)) {
-    // try common RSS variants
-    t = Date.parse(raw.replace(/([+-]\d{2})(\d{2})$/, '$1:$2'));
-  }
-  if (!Number.isFinite(t)) return null;
-  // reject clearly future or ancient
-  const now = Date.now();
-  if (t > now + 2 * 3600 * 1000 || t < now - 365 * 864e5) return null;
-  return t;
-}
+const parseDate = s => { const t = Date.parse(String(s || '').trim()); return Number.isFinite(t) ? t : null; };
 
+// A function replacer is required: a plain string would interpret "$&", "$'" and "$$" inside the news text.
 function applyTemplate(template, body) {
   const tpl = template && String(template).trim() ? String(template) : DEFAULT_TEMPLATE;
   const boldContent = toBoldLines(body);
@@ -378,6 +302,7 @@ function applyTemplate(template, body) {
   return [...lines.slice(0, mid), boldContent, ...lines.slice(mid)].join('\n');
 }
 
+// Polishes machine-translated Arabic into natural, professional crypto & financial journalism Arabic.
 function polishArabicTranslation(text) {
   let s = String(text || '').trim();
   if (!s) return '';
@@ -404,9 +329,10 @@ function polishArabicTranslation(text) {
   return s.replace(/[ \t]+/g, ' ').replace(/\n{3,}/g, '\n\n').trim();
 }
 
+// bodyAr = Arabic version (or the original when translation is unavailable), bodyEn = original English text.
 function formatCleanBilingualPost({ bodyAr, bodyEn, template, sourceName = '', bilingual = false }) {
-  const cleanAr = truncate(stripLinksAndHandles(bodyAr, sourceName), 900);
-  const cleanEn = truncate(stripLinksAndHandles(bodyEn, sourceName), 900);
+  const cleanAr = truncate(stripLinksAndHandles(bodyAr, sourceName), 750);
+  const cleanEn = truncate(stripLinksAndHandles(bodyEn, sourceName), 750);
   const parts = [];
   if (cleanAr) parts.push(cleanAr);
   if (bilingual && cleanEn && cleanEn.toLowerCase() !== cleanAr.toLowerCase()) {
@@ -417,7 +343,6 @@ function formatCleanBilingualPost({ bodyAr, bodyEn, template, sourceName = '', b
 
 function formatPriceAlert(item, template) {
   const change = Number(item.change24h) || 0, price = Number(item.price) || 0;
-  if (!price || price <= 0) return null;
   const up = change >= 0;
   const dirAr = up ? 'ارتفاع' : 'انخفاض';
   const sign = up ? '+' : '';
@@ -426,7 +351,8 @@ function formatPriceAlert(item, template) {
   return applyTemplate(template, body);
 }
 
-function verifyInitData(init, token, maxAgeSec = 600, nowSec = Date.now() / 1000) {
+// Telegram Mini App initData (HMAC) check, used to protect the admin panel API.
+function verifyInitData(init, token, maxAgeSec = 86400, nowSec = Date.now() / 1000) {
   if (!init || !token) return null;
   const p = new URLSearchParams(init), hash = p.get('hash');
   if (!hash || !/^[0-9a-f]{64}$/i.test(hash)) return null;
@@ -442,26 +368,10 @@ function verifyInitData(init, token, maxAgeSec = 600, nowSec = Date.now() / 1000
   return { user };
 }
 
-function splitForTranslation(text, maxLen = 400) {
-  const s = String(text || '').trim();
-  if (s.length <= maxLen) return [s];
-  const parts = [];
-  let rest = s;
-  while (rest.length > maxLen) {
-    let cut = rest.lastIndexOf('. ', maxLen);
-    if (cut < maxLen * 0.4) cut = rest.lastIndexOf(' ', maxLen);
-    if (cut < 20) cut = maxLen;
-    parts.push(rest.slice(0, cut).trim());
-    rest = rest.slice(cut).trim();
-  }
-  if (rest) parts.push(rest);
-  return parts;
-}
-
 module.exports = {
   DEFAULT_CHANNELS, DEFAULT_RSS_FEEDS, DEFAULT_X_HANDLES, DEFAULT_TEMPLATE, DEFAULT_BUTTONS, DEFAULT_CUSTOM_EMOJI_PACKS, DEFAULT_PROMO,
-  cleanChannelName, cleanTargetChannel, cleanXHandle, cleanFeedUrl, isSafeRemoteUrl, isPrivateOrReservedIp,
+  cleanChannelName, cleanTargetChannel, cleanXHandle, cleanFeedUrl, isSafeRemoteUrl,
   stripLinksAndHandles, toBoldLines, newsHash, hasContent, truncate, isArabic, isPromo, parseDate,
   applyTemplate, polishArabicTranslation, formatCleanBilingualPost, formatPriceAlert, verifyInitData,
-  normalizedNewsTokens, newsSignals, areSimilarNews, safeFetch, resolveAndCheckHost, splitForTranslation,
+  normalizedNewsTokens, newsSignals, areSimilarNews,
 };

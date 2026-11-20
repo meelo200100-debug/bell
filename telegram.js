@@ -11,17 +11,16 @@ class TelegramBot extends EventEmitter {
     this.offset = 0;
     this.running = false;
     this.abortController = null;
-    this.pollerCount = 0;
     if (options.polling) this.startPolling().catch(() => {});
   }
 
-  async call(method, payload = {}, timeoutMs = 30000, externalSignal) {
+  async call(method, payload = {}, timeoutMs = 30000, externalSignal = null) {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), timeoutMs);
-    const onAbort = () => controller.abort();
+    const abortFromParent = () => controller.abort();
     if (externalSignal) {
       if (externalSignal.aborted) controller.abort();
-      else externalSignal.addEventListener('abort', onAbort, { once: true });
+      else externalSignal.addEventListener('abort', abortFromParent, { once: true });
     }
     try {
       const response = await fetch(`${this.apiBase}/${method}`, {
@@ -34,13 +33,12 @@ class TelegramBot extends EventEmitter {
       if (!response.ok || !data.ok) {
         const error = new Error(`ETELEGRAM: ${data.error_code || response.status} ${data.description || response.statusText}`);
         error.response = { body: data };
-        error.code = data.error_code || response.status;
         throw error;
       }
       return data.result;
     } finally {
       clearTimeout(timer);
-      if (externalSignal) externalSignal.removeEventListener('abort', onAbort);
+      if (externalSignal) externalSignal.removeEventListener('abort', abortFromParent);
     }
   }
 
@@ -58,13 +56,8 @@ class TelegramBot extends EventEmitter {
   }
 
   async startPolling() {
-    if (this.running || this.pollerCount > 0) {
-      console.warn('Polling already active; refusing to start a second poller.');
-      return;
-    }
+    if (this.running) return;
     this.running = true;
-    this.pollerCount = 1;
-    let backoffMs = 1000;
     while (this.running) {
       try {
         this.abortController = new AbortController();
@@ -73,7 +66,6 @@ class TelegramBot extends EventEmitter {
           timeout: 25,
           allowed_updates: ['message'],
         }, 35000, this.abortController.signal);
-        backoffMs = 1000;
         for (const update of result || []) {
           this.offset = Math.max(this.offset, Number(update.update_id || 0) + 1);
           if (update.message) this.emit('message', update.message);
@@ -81,23 +73,16 @@ class TelegramBot extends EventEmitter {
       } catch (error) {
         if (!this.running) break;
         this.emit('polling_error', error);
-        const body = error && error.response && error.response.body;
-        const retryAfter = body && body.parameters && body.parameters.retry_after;
-        const wait = retryAfter ? Math.min(60, Number(retryAfter) || 5) * 1000 : Math.min(30000, backoffMs);
-        backoffMs = Math.min(30000, backoffMs * 2);
-        await new Promise(resolve => setTimeout(resolve, wait));
+        await new Promise(resolve => setTimeout(resolve, 2000));
       } finally {
         this.abortController = null;
       }
     }
-    this.pollerCount = 0;
   }
 
   async stopPolling() {
     this.running = false;
-    if (this.abortController) {
-      try { this.abortController.abort(); } catch (_) {}
-    }
+    if (this.abortController) this.abortController.abort();
   }
 }
 
