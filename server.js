@@ -8,6 +8,10 @@ const { createCore } = require('./core');
 const env = process.env;
 const { BOT_TOKEN, TURSO_DATABASE_URL, TURSO_AUTH_TOKEN, DB_PATH = 'file:newsbot.db', PORT = 3000 } = env;
 if (!BOT_TOKEN) { console.error('BOT_TOKEN is missing'); process.exit(1); }
+if (!String(env.ADMIN_ID || env.ADMIN_CHAT_ID || '').trim()) {
+  console.error('ADMIN_ID is required: set your numeric Telegram user ID before starting the bot.');
+  process.exit(1);
+}
 
 const list = s => String(s || '').split(',').map(x => x.trim()).filter(Boolean);
 const num = (v, d, min) => Math.max(min, Number(v) || d);
@@ -15,7 +19,7 @@ const num = (v, d, min) => Math.max(min, Number(v) || d);
 const cfg = {
   botToken: BOT_TOKEN,
   // Your numeric Telegram user id (the panel and the commands accept only this account).
-  adminId: String(env.ADMIN_ID || env.ADMIN_CHAT_ID || '8869642405').trim(),
+  adminId: String(env.ADMIN_ID || env.ADMIN_CHAT_ID || '').trim(),
   webappUrl: env.WEBAPP_URL || '',
   targetChannels: list(env.TARGET_CHANNELS),
   xFeedUrls: list(env.X_FEED_URL),
@@ -29,7 +33,7 @@ const cfg = {
   postDelayMs: num(env.POST_DELAY_MS, 5000, 0),
   bilingual: env.BILINGUAL === '1',
   priceThreshold: num(env.PRICE_THRESHOLD_PCT, 3, 0.5),
-  initMaxAgeSec: 3 * 86400,
+  initMaxAgeSec: 86400,
 };
 const intervalMs = num(env.FETCH_INTERVAL_MS, 300000, 60000);
 
@@ -60,6 +64,7 @@ app.get('/api/state', ah(core.handlers.state));
 app.post('/api/toggle', ah(core.handlers.toggle));
 app.post('/api/template', ah(core.handlers.template));
 app.post('/api/sources', ah(core.handlers.sources));
+app.delete('/api/sources/:id', ah(core.handlers.deleteSource));
 app.post('/api/targets', ah(core.handlers.targets));
 app.post('/api/fetch-now', ah(core.handlers.fetchNow));
 

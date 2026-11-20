@@ -254,13 +254,9 @@ function formatPriceAlert(item, template) {
   const change = Number(item.change24h) || 0, price = Number(item.price) || 0;
   const up = change >= 0;
   const dirAr = up ? 'ارتفاع' : 'انخفاض';
-  const dirEn = up ? 'UP' : 'DOWN';
   const sign = up ? '+' : '';
   const priceStr = price >= 1 ? price.toLocaleString('en-US', { maximumFractionDigits: 2 }) : price.toFixed(6);
-  const body = [
-    `${dirAr} ${item.name} (${item.symbol}) بنسبة ${sign}${change.toFixed(2)}% خلال 24 ساعة — السعر $${priceStr}`,
-    `${item.symbol} ${dirEn} ${sign}${change.toFixed(2)}% (24h) — Price $${priceStr}`,
-  ].join('\n');
+  const body = `${dirAr} ${item.name} (${item.symbol}) بنسبة ${sign}${change.toFixed(2)}% خلال 24 ساعة — السعر $${priceStr}`;
   return applyTemplate(template, body);
 }
 

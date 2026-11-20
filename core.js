@@ -29,6 +29,25 @@ function decodeHtml(str) {
     .trim();
 }
 
+function telegramHtml(text) {
+  let s = String(text || '');
+  const custom = [];
+  s = s.replace(/\{\{TG_EMOJI:(\d+)\|([^}]+)\}\}/g, (_, id, glyph) => {
+    const token = `__CUSTOM_EMOJI_${custom.length}__`;
+    custom.push(`<tg-emoji emoji-id="${id}">${escapeHtml(glyph)}</tg-emoji>`);
+    return token;
+  });
+  s = escapeHtml(s);
+  s = s.replace(/\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)/g, '<a href="$2">$1</a>');
+  s = s.replace(/\*([^*\n]+)\*/g, '<b>$1</b>');
+  s = s.replace(/\n/g, '\n');
+  custom.forEach((html, i) => { s = s.replace(`__CUSTOM_EMOJI_${i}__`, html); });
+  return s;
+}
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
 function tgError(e) {
   const body = e && e.response && e.response.body;
   let code = body && body.error_code;
@@ -220,8 +239,8 @@ function createCore({ db, bot, cfg, fetchFn = fetch, sleep = ms => new Promise(r
     let plain = false, waited = false;
     for (let i = 0; i < 3; i++) {
       try {
-        await bot.sendMessage(chatId, plain ? text.replace(/\*/g, '') : text,
-          plain ? { disable_web_page_preview: true } : { parse_mode: 'Markdown', disable_web_page_preview: true });
+        await bot.sendMessage(chatId, plain ? text.replace(/\{\{TG_EMOJI:\d+\|([^}]+)\}\}/g, '$1').replace(/<[^>]*>/g, '') : telegramHtml(text),
+          plain ? { disable_web_page_preview: true } : { parse_mode: 'HTML', disable_web_page_preview: true });
         return { ok: true };
       } catch (e) {
         const { code, desc, retry } = tgError(e);
@@ -246,12 +265,12 @@ function createCore({ db, bot, cfg, fetchFn = fetch, sleep = ms => new Promise(r
 
   // ---------- price alerts ----------
   const COINS = [
-    { id: 'bitcoin', symbol: 'BTC', name: 'Bitcoin' },
-    { id: 'ethereum', symbol: 'ETH', name: 'Ethereum' },
-    { id: 'binancecoin', symbol: 'BNB', name: 'BNB' },
-    { id: 'solana', symbol: 'SOL', name: 'Solana' },
-    { id: 'the-open-network', symbol: 'TON', name: 'Toncoin' },
-    { id: 'ripple', symbol: 'XRP', name: 'XRP' },
+    { id: 'bitcoin', symbol: 'BTC', name: 'البيتكوين' },
+    { id: 'ethereum', symbol: 'ETH', name: 'الإيثيريوم' },
+    { id: 'binancecoin', symbol: 'BNB', name: 'باينانس كوين' },
+    { id: 'solana', symbol: 'SOL', name: 'سولانا' },
+    { id: 'the-open-network', symbol: 'TON', name: 'تونكوين' },
+    { id: 'ripple', symbol: 'XRP', name: 'ريبل' },
   ];
   async function fetchCryptoMarketAlerts(template, targets) {
     const ids = COINS.map(c => c.id).join(',');
@@ -315,8 +334,14 @@ function createCore({ db, bot, cfg, fetchFn = fetch, sleep = ms => new Promise(r
           await sleep(postDelayMs);
         }
         const it = picked[idx];
-        const ar = L.isArabic(it.text) ? it.text : ((await translateToArabic(it.text.slice(0, 800))) || it.text);
-        const r = await publish(L.formatCleanBilingualPost({ bodyAr: ar, bodyEn: it.text, template, sourceName: it.sourceTitle || it.source || '', bilingual: !!cfg.bilingual }), targets);
+        const translated = await translateToArabic(it.text.slice(0, 800));
+        const ar = translated && L.isArabic(translated) ? translated : (L.isArabic(it.text) ? it.text : null);
+        if (!ar) {
+          lastError = `تعذرت ترجمة الخبر إلى العربية؛ تم تخطيه: ${String(it.sourceTitle || it.source || 'مصدر غير معروف')}`;
+          console.warn(lastError);
+          continue;
+        }
+        const r = await publish(L.formatCleanBilingualPost({ bodyAr: ar, bodyEn: '', template, sourceName: it.sourceTitle || it.source || '', bilingual: false }), targets);
         if (!r.done) { lastError = `Telegram unreachable: ${r.error}`; break; }
         await run('INSERT OR IGNORE INTO posted_items(hash, source, title, posted_at) VALUES(?, ?, ?, ?)', [it.h, it.source || 'feed', it.text.slice(0, 120), now()]);
         if (r.ok) published++; else lastError = `Could not post to any channel: ${r.error}`;
@@ -382,6 +407,12 @@ function createCore({ db, bot, cfg, fetchFn = fetch, sleep = ms => new Promise(r
       await run('INSERT OR IGNORE INTO sources(type, value, active) VALUES(?, ?, 1)', [type, value]);
       res.json({ ok: true });
     },
+    deleteSource: async (req, res) => {
+      const id = Number(req.params.id);
+      if (!Number.isSafeInteger(id) || id <= 0) return res.status(400).json({ error: 'invalid_value' });
+      const result = await run('DELETE FROM sources WHERE id=?', [id]);
+      res.json({ ok: true, deleted: Number(result.rowsAffected || 0) });
+    },
     targets: async (req, res) => {
       const chatId = L.cleanTargetChannel(req.body && req.body.chat_id);
       if (!chatId) return res.status(400).json({ error: 'invalid_target' });
@@ -397,6 +428,20 @@ function createCore({ db, bot, cfg, fetchFn = fetch, sleep = ms => new Promise(r
   const safe = fn => (msg, m) => Promise.resolve().then(() => fn(msg, m)).catch(e => console.error('Command error:', e));
 
   function registerCommands() {
+    // Let the admin use Telegram's native Premium/custom-emoji picker: send a custom emoji
+    // to the bot and it returns the exact template token with its Telegram emoji ID.
+    bot.on('message', safe(async msg => {
+      if (!isAdmin(msg)) return;
+      const text = String(msg.text || msg.caption || '');
+      const entities = msg.entities || msg.caption_entities || [];
+      const custom = entities.filter(e => e.type === 'custom_emoji' && e.custom_emoji_id);
+      if (!custom.length) return;
+      const tokens = custom.map(e => {
+        const glyph = text.substring(e.offset, e.offset + e.length) || '⭐';
+        return `{{TG_EMOJI:${e.custom_emoji_id}|${glyph}}}`;
+      });
+      await say(msg.chat.id, '✅ انسخ الكود التالي وضعه في قالب النشر:\n' + tokens.join('\n'));
+    }));
     bot.onText(/^\/start(?:@\w+)?/, safe(async msg => {
       if (!isAdmin(msg)) return say(msg.chat.id, '⚡ بوت أخبار الكتيبة. هذا البوت خاص بالإدارة.');
       await say(msg.chat.id,

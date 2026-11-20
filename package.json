@@ -1,6 +1,6 @@
 {
   "name": "alkatiba-news-bot",
-  "version": "1.3.0",
+  "version": "1.4.0",
   "description": "Crypto news and market alerts Telegram bot with an admin-only control panel",
   "main": "server.js",
   "scripts": {
