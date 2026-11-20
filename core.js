@@ -9,6 +9,8 @@ function decodeHtml(str) {
   const tags = /<\/?[a-z][^>]*>/gi;
   return String(str || '')
     .replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, '$1')
+    // Telegram public previews encode premium emoji as {{TGEMOJI:id|<html glyph>}}.
+    .replace(/\{\{TG[_]?EMOJI:(\d+)\|([\s\S]*?)\}\}/gi, (_, id, glyph) => `{{TG_EMOJI:${id}|${String(glyph).replace(/<[^>]*>/g, '')}}}`)
     .replace(/<tg-emoji\b[^>]*emoji-id=["'](\d+)["'][^>]*>([\s\S]*?)<\/tg-emoji>/gi, (_, id, glyph) => `{{TG_EMOJI:${id}|${String(glyph).replace(/<[^>]*>/g, '')}}}`)
     // Remove entire <a>...</a> tags that link to Telegram, X/Twitter, or external channel/source URLs
     .replace(/<a\b[^>]*href=["']https?:\/\/[^"']*["'][^>]*>[\s\S]*?<\/a>/gi, ' ')
@@ -33,7 +35,7 @@ function decodeHtml(str) {
 function telegramHtml(text) {
   let s = String(text || '');
   const custom = [];
-  s = s.replace(/\{\{TG_EMOJI:(\d+)\|([^}]+)\}\}/g, (_, id, glyph) => {
+  s = s.replace(/\{\{TG[_]?EMOJI:(\d+)\|([^}]+)\}\}/g, (_, id, glyph) => {
     const token = `__CUSTOM_EMOJI_${custom.length}__`;
     custom.push(`<tg-emoji emoji-id="${id}">${escapeHtml(glyph)}</tg-emoji>`);
     return token;
@@ -90,6 +92,8 @@ function createCore({ db, bot, cfg, fetchFn = fetch, sleep = ms => new Promise(r
     await run('CREATE TABLE IF NOT EXISTS posted_items(hash TEXT PRIMARY KEY, source TEXT, title TEXT, posted_at INTEGER)');
     await run('CREATE TABLE IF NOT EXISTS failed_items(hash TEXT PRIMARY KEY, retry_after INTEGER, reason TEXT)');
     await run('CREATE TABLE IF NOT EXISTS cycle_locks(name TEXT PRIMARY KEY, owner TEXT NOT NULL, expires_at INTEGER NOT NULL)');
+    await run('CREATE TABLE IF NOT EXISTS custom_emoji_packs(name TEXT PRIMARY KEY, url TEXT NOT NULL, synced_at INTEGER, count INTEGER DEFAULT 0)');
+    await run('CREATE TABLE IF NOT EXISTS custom_emojis(custom_emoji_id TEXT PRIMARY KEY, pack_name TEXT NOT NULL, glyph TEXT, file_id TEXT)');
 
     const en = first(await run("SELECT v FROM settings WHERE k='enabled'"));
     if (!en) await run("INSERT INTO settings(k, v) VALUES('enabled', '1')");
@@ -98,6 +102,7 @@ function createCore({ db, bot, cfg, fetchFn = fetch, sleep = ms => new Promise(r
     // Only the first run writes the default template; a template saved from the panel survives restarts.
     await run("INSERT OR IGNORE INTO settings(k, v) VALUES('template', ?)", [L.DEFAULT_TEMPLATE]);
     await run("INSERT OR IGNORE INTO settings(k, v) VALUES('buttons', ?)", [JSON.stringify(L.DEFAULT_BUTTONS)]);
+    await syncCustomEmojiPacks();
 
     for (const ch of L.DEFAULT_CHANNELS) await run("INSERT OR IGNORE INTO sources(type, value, active) VALUES('tg_channel', ?, 1)", [ch]);
     for (const feed of L.DEFAULT_RSS_FEEDS) await run("INSERT OR IGNORE INTO sources(type, value, active) VALUES('rss', ?, 1)", [feed]);
@@ -125,6 +130,30 @@ function createCore({ db, bot, cfg, fetchFn = fetch, sleep = ms => new Promise(r
       const buttons = JSON.parse((r && r.v) || '[]');
       return Array.isArray(buttons) && buttons.length === 4 ? buttons : L.DEFAULT_BUTTONS;
     } catch (_) { return L.DEFAULT_BUTTONS; }
+  }
+
+  function emojiPackName(url) {
+    try { return new URL(url).pathname.split('/').filter(Boolean).pop() || ''; } catch (_) { return ''; }
+  }
+
+  async function syncCustomEmojiPacks() {
+    for (const url of L.DEFAULT_CUSTOM_EMOJI_PACKS) {
+      const name = emojiPackName(url);
+      if (!name) continue;
+      await run('INSERT OR IGNORE INTO custom_emoji_packs(name, url, synced_at, count) VALUES(?, ?, NULL, 0)', [name, url]);
+      if (!bot || typeof bot.call !== 'function') continue;
+      try {
+        const set = await bot.call('getStickerSet', { name }, 15000);
+        const stickers = Array.isArray(set && set.stickers) ? set.stickers : [];
+        for (const sticker of stickers) {
+          if (!sticker.custom_emoji_id) continue;
+          await run('INSERT INTO custom_emojis(custom_emoji_id, pack_name, glyph, file_id) VALUES(?, ?, ?, ?) ON CONFLICT(custom_emoji_id) DO UPDATE SET pack_name=excluded.pack_name, glyph=excluded.glyph, file_id=excluded.file_id', [String(sticker.custom_emoji_id), name, String(sticker.emoji || ''), String(sticker.file_id || '')]);
+        }
+        await run('UPDATE custom_emoji_packs SET synced_at=?, count=? WHERE name=?', [now(), stickers.filter(s => s.custom_emoji_id).length, name]);
+      } catch (e) {
+        console.warn(`Custom emoji pack sync failed [${name}]:`, e.message);
+      }
+    }
   }
   async function setEnabledState(val) {
     isRunning = !!val;
@@ -249,14 +278,36 @@ function createCore({ db, bot, cfg, fetchFn = fetch, sleep = ms => new Promise(r
   }
 
   // ---------- sending ----------
+  const SHARE_EVENT_LABEL = 'مشاركة الخبر 🔴';
+
+  function messageLink(chatId, messageId) {
+    const id = String(chatId || '');
+    if (id.startsWith('@')) return `https://t.me/${id.slice(1)}/${messageId}`;
+    if (/^-100\d+$/.test(id)) return `https://t.me/c/${id.slice(4)}/${messageId}`;
+    return '';
+  }
+
   async function sendSafe(chatId, text, buttons = []) {
     let plain = false, waited = false;
     for (let i = 0; i < 3; i++) {
       try {
         const options = plain ? { disable_web_page_preview: true } : { parse_mode: 'HTML', disable_web_page_preview: true };
-        if (buttons.length === 4) options.reply_markup = { inline_keyboard: [buttons] };
-        await bot.sendMessage(chatId, plain ? text.replace(/\{\{TG_EMOJI:\d+\|([^}]+)\}\}/g, '$1').replace(/<[^>]*>/g, '') : telegramHtml(text), options);
-        return { ok: true };
+        if (buttons.length === 4) options.reply_markup = { inline_keyboard: [buttons.slice(0, 2), buttons.slice(2, 4)] };
+        const message = await bot.sendMessage(chatId, plain ? text.replace(/\{\{TG[_]?EMOJI:\d+\|([^}]+)\}\}/g, '$1').replace(/<[^>]*>/g, '') : telegramHtml(text), options);
+        const shareUrl = message && messageLink(chatId, message.message_id);
+        if (shareUrl && typeof bot.call === 'function' && options.reply_markup) {
+          const shareButton = { text: SHARE_EVENT_LABEL, url: `https://t.me/share/url?url=${encodeURIComponent(shareUrl)}` };
+          try {
+            await bot.call('editMessageReplyMarkup', {
+              chat_id: chatId,
+              message_id: message.message_id,
+              reply_markup: { inline_keyboard: [...options.reply_markup.inline_keyboard, [shareButton]] },
+            }, 15000);
+          } catch (e) {
+            console.warn('Could not add event share button:', e.message);
+          }
+        }
+        return { ok: true, messageId: message && message.message_id };
       } catch (e) {
         const { code, desc, retry } = tgError(e);
         if (code === 429 && !waited) { waited = true; await sleep(Math.min(30, retry || 5) * 1000); continue; }
@@ -417,17 +468,19 @@ function createCore({ db, bot, cfg, fetchFn = fetch, sleep = ms => new Promise(r
 
   const handlers = {
     state: async (req, res) => {
-      const [sources, targets, posted, template, buttons] = await Promise.all([
+      const [sources, targets, posted, template, buttons, emojiPacks] = await Promise.all([
         run('SELECT id, type, value, active FROM sources ORDER BY id ASC'),
         run('SELECT id, chat_id, active FROM targets ORDER BY id ASC'),
         run('SELECT COUNT(*) AS c FROM posted_items'),
         getTemplate(),
         getButtons(),
+        run('SELECT name, url, synced_at, count FROM custom_emoji_packs ORDER BY name'),
       ]);
       res.json({
         running: isRunning, busy: cycleRunning, lastCycleAt, lastError,
         publishedCount: Number((first(posted) || {}).c || 0), template,
         sources: sources.rows || [], targets: targets.rows || [], prices: latestPrices, buttons,
+        emojiPacks: emojiPacks.rows || [],
         xEnabled: cfg.nitterHosts.length > 0, translateEnabled: true, adFilter: cfg.adFilter,
       });
     },

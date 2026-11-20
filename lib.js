@@ -51,6 +51,13 @@ const DEFAULT_BUTTONS = [
   { text: 'مشاركة الخبر', url: 'https://t.me/share/url?url=https%3A%2F%2Ft.me%2FAlkatiba21' },
 ];
 
+const DEFAULT_CUSTOM_EMOJI_PACKS = [
+  'https://t.me/addemoji/H222890',
+  'https://t.me/addemoji/FlagsIcons',
+  'https://t.me/addemoji/ZIHAD_Premium_Seller_by_fStikBot',
+  'https://t.me/addemoji/IconsEmoji_JABA',
+];
+
 const cleanSlug = s => String(s || '').trim()
   .replace(/^https?:\/\/(t\.me|telegram\.me)\/(s\/)?/i, '')
   .replace(/^@+/, '').split('/')[0].split('?')[0].trim();
@@ -362,7 +369,7 @@ function verifyInitData(init, token, maxAgeSec = 86400, nowSec = Date.now() / 10
 }
 
 module.exports = {
-  DEFAULT_CHANNELS, DEFAULT_RSS_FEEDS, DEFAULT_X_HANDLES, DEFAULT_TEMPLATE, DEFAULT_BUTTONS, DEFAULT_PROMO,
+  DEFAULT_CHANNELS, DEFAULT_RSS_FEEDS, DEFAULT_X_HANDLES, DEFAULT_TEMPLATE, DEFAULT_BUTTONS, DEFAULT_CUSTOM_EMOJI_PACKS, DEFAULT_PROMO,
   cleanChannelName, cleanTargetChannel, cleanXHandle, cleanFeedUrl, isSafeRemoteUrl,
   stripLinksAndHandles, toBoldLines, newsHash, hasContent, truncate, isArabic, isPromo, parseDate,
   applyTemplate, polishArabicTranslation, formatCleanBilingualPost, formatPriceAlert, verifyInitData,
