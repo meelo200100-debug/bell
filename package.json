@@ -1,13 +1,10 @@
 {
-  "name": "bellgram-bot",
+  "name": "alkatiba-news-bot",
   "version": "1.0.0",
-  "description": "BELLGRAM Telegram Mini App & Bot (Turso Cloud DB)",
+  "description": "Automated bilingual crypto news, events, and market alerts Telegram publisher",
   "main": "server.js",
   "scripts": {
     "start": "node server.js"
-  },
-  "engines": {
-    "node": ">=20.0.0"
   },
   "dependencies": {
     "@libsql/client": "^0.14.0",

@@ -1,24 +1,33 @@
-// Bell Coin / BELLGRAM: Express API + Telegram bot + Turso Cloud SQLite (@libsql/client).
-// The server is the single source of truth: mining, levels, balances and wallet checks never trust the browser.
-const express = require('express'), path = require('path'), fs = require('fs');
+const express = require('express');
+const path = require('path');
+const fs = require('fs');
 const { createClient } = require('@libsql/client');
 const TelegramBot = require('node-telegram-bot-api');
 const L = require('./lib');
 
-const { BOT_TOKEN, WEBAPP_URL, TONAPI_KEY, TURSO_DATABASE_URL, TURSO_AUTH_TOKEN, DB_PATH = 'file:bell.db', PORT = 3000 } = process.env;
-let { BOT_LINK } = process.env;
+const {
+  BOT_TOKEN,
+  TURSO_DATABASE_URL,
+  TURSO_AUTH_TOKEN,
+  DB_PATH = 'file:newsbot.db',
+  PORT = 3000,
+  ADMIN_CHAT_ID = '',
+  ADMIN_ID = '',
+  TARGET_CHANNELS = '@Alkatiba21',
+  X_FEED_URL = '',
+  FETCH_INTERVAL_MS = '300000',
+  PRICE_THRESHOLD_PCT = '3',
+} = process.env;
 
-if (!BOT_TOKEN) { console.error('BOT_TOKEN is missing'); process.exit(1); }
-if (!WEBAPP_URL) console.warn('WARNING: WEBAPP_URL is not set in environment variables!');
-if (!TURSO_DATABASE_URL) console.warn('WARNING: TURSO_DATABASE_URL is not set! Falling back to local file database.');
+const ADMIN = String(ADMIN_CHAT_ID || ADMIN_ID || '8869642405').trim();
+const intervalMs = Math.max(60000, Number(FETCH_INTERVAL_MS) || 300000);
+const priceThreshold = Math.max(0.5, Number(PRICE_THRESHOLD_PCT) || 3);
 
-const JETTON_MASTER = 'EQAWPHubEzmFIM0UWV0yuATzbmj9HdRRn5WXvKLzqflrWGvl';
-const JETTON_MASTER_RAW = '0:163c7b9b13398520cd14595d32b804f36e68fd1dd4519f9597bca2f3a9f96b58';
-const JETTON_DECIMALS = 9;
-const REF_BONUS = 50, MIN_CLAIM = 0.01, WALLET_TTL = 60000;
-const WITHDRAW_MIN_BALANCE = 10000, WITHDRAW_MIN_WALLET = 3000;
+if (!BOT_TOKEN) {
+  console.error('BOT_TOKEN is missing');
+  process.exit(1);
+}
 
-// Connect to Turso Cloud Database (or local file fallback if TURSO_DATABASE_URL is not set)
 const db = createClient({
   url: TURSO_DATABASE_URL || (DB_PATH.startsWith('file:') ? DB_PATH : `file:${DB_PATH}`),
   authToken: TURSO_AUTH_TOKEN,
@@ -28,299 +37,407 @@ async function run(sql, args = []) {
   return db.execute({ sql, args });
 }
 
-async function get(id) {
-  const r = await run('SELECT * FROM users WHERE id=?', [id]);
-  if (!r.rows || !r.rows[0]) return null;
-  const row = r.rows[0];
-  return {
-    id: Number(row.id),
-    name: String(row.name || 'User'),
-    balance: Number(row.balance || 0),
-    started: Number(row.started || 0),
-    refs: Number(row.refs || 0),
-    wallet: row.wallet ? String(row.wallet) : null,
-    seg_start: Number(row.seg_start || 0),
-    acc: Number(row.acc || 0),
-    rate: Number(row.rate || 500),
-    mined: Number(row.mined || 0),
-    streak: Number(row.streak || 0),
-    last_login: Number(row.last_login || 0),
-    wbal: Number(row.wbal || 0),
-    ton: Number(row.ton || 0),
-    wcheck: Number(row.wcheck || 0),
-    wallet_changed: Number(row.wallet_changed || 0),
-    last_wallet: row.last_wallet ? String(row.last_wallet) : null,
-    referred_by: row.referred_by ? Number(row.referred_by) : null,
-  };
-}
+const bot = new TelegramBot(BOT_TOKEN, { polling: true });
+let isRunning = true;
+let lastCycleAt = null;
+let lastError = null;
+let latestPrices = [];
 
 async function initDB() {
-  await run(`CREATE TABLE IF NOT EXISTS users(
-    id INTEGER PRIMARY KEY,
-    name TEXT,
-    balance REAL DEFAULT 0,
-    started INTEGER,
-    refs INTEGER DEFAULT 0,
-    wallet TEXT,
-    seg_start INTEGER DEFAULT 0,
-    acc REAL DEFAULT 0,
-    rate REAL DEFAULT 500,
-    mined REAL DEFAULT 0,
-    streak INTEGER DEFAULT 0,
-    last_login INTEGER DEFAULT 0,
-    wbal REAL DEFAULT 0,
-    ton REAL DEFAULT 0,
-    wcheck INTEGER DEFAULT 0,
-    wallet_changed INTEGER DEFAULT 0,
-    last_wallet TEXT,
-    referred_by INTEGER
+  await run(`CREATE TABLE IF NOT EXISTS settings(
+    k TEXT PRIMARY KEY,
+    v TEXT
   )`);
-  const info = await run('PRAGMA table_info(users)');
-  const have = new Set((info.rows || []).map(c => c.name));
-  const add = async (n, t) => { if (!have.has(n)) await run(`ALTER TABLE users ADD COLUMN ${n} ${t}`); };
-  await add('seg_start', 'INTEGER DEFAULT 0');
-  await add('acc', 'REAL DEFAULT 0');
-  await add('rate', 'REAL DEFAULT 500');
-  await add('mined', 'REAL DEFAULT 0');
-  await add('streak', 'INTEGER DEFAULT 0');
-  await add('last_login', 'INTEGER DEFAULT 0');
-  await add('wbal', 'REAL DEFAULT 0');
-  await add('ton', 'REAL DEFAULT 0');
-  await add('wcheck', 'INTEGER DEFAULT 0');
-  await add('wallet_changed', 'INTEGER DEFAULT 0');
-  await add('last_wallet', 'TEXT');
-  await add('referred_by', 'INTEGER');
-  await run('UPDATE users SET seg_start = started WHERE seg_start = 0 OR seg_start IS NULL');
-  await run('CREATE UNIQUE INDEX IF NOT EXISTS users_wallet ON users(wallet) WHERE wallet IS NOT NULL');
-  console.log('Database initialized successfully (Turso ready)');
-}
+  await run(`CREATE TABLE IF NOT EXISTS sources(
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    type TEXT NOT NULL,
+    value TEXT NOT NULL UNIQUE,
+    active INTEGER DEFAULT 1
+  )`);
+  await run(`CREATE TABLE IF NOT EXISTS targets(
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    chat_id TEXT NOT NULL UNIQUE,
+    active INTEGER DEFAULT 1
+  )`);
+  await run(`CREATE TABLE IF NOT EXISTS posted_items(
+    hash TEXT PRIMARY KEY,
+    source TEXT,
+    title TEXT,
+    posted_at INTEGER
+  )`);
 
-// ---- TON API (read-only) ----
-async function tonapi(p) {
-  const r = await fetch('https://tonapi.io/v2' + p, {
-    headers: TONAPI_KEY ? { Authorization: `Bearer ${TONAPI_KEY}` } : {},
-    signal: AbortSignal.timeout(8000),
-  });
-  if (!r.ok) throw new Error('tonapi ' + r.status);
-  return r.json();
-}
-const getPublicKey = async addr => {
-  try {
-    const res = await tonapi(`/accounts/${encodeURIComponent(addr)}/publickey`);
-    return res && res.public_key ? res.public_key : null;
-  } catch (e) {
-    return null;
+  const enabledRes = await run("SELECT v FROM settings WHERE k='enabled'");
+  if (!enabledRes.rows || !enabledRes.rows.length) {
+    await run("INSERT INTO settings(k, v) VALUES('enabled', '1')");
+  } else {
+    isRunning = enabledRes.rows[0].v !== '0';
   }
-};
 
-function parseUnits(raw, decimals) {
-  if (!raw) return 0;
-  try {
-    const b = BigInt(String(raw));
-    const base = 10n ** BigInt(decimals);
-    return Number(b / base) + Number(b % base) / Number(base);
-  } catch (e) {
-    return (Number(raw) || 0) / (10 ** decimals);
+  const tplRes = await run("SELECT v FROM settings WHERE k='template'");
+  if (!tplRes.rows || !tplRes.rows.length) {
+    await run("INSERT INTO settings(k, v) VALUES('template', ?)", [L.DEFAULT_TEMPLATE]);
   }
-}
 
-async function readWallet(addr) {
-  const id = encodeURIComponent(addr);
-  const [acc, jets] = await Promise.all([tonapi(`/accounts/${id}`), tonapi(`/accounts/${id}/jettons?limit=1000`)]);
-  const item = (jets.balances || []).find(x => {
-    const a = x.jetton && String(x.jetton.address).toLowerCase();
-    return a === JETTON_MASTER.toLowerCase() || a === JETTON_MASTER_RAW;
-  });
-  const wbal = item ? parseUnits(item.balance, JETTON_DECIMALS) : 0;
-  const ton = parseUnits(acc.balance, 9);
-  return { wbal: Number.isFinite(wbal) ? wbal : 0, ton: Number.isFinite(ton) ? ton : 0 };
-}
-
-// Re-reads the wallet (cached 60s) and, if the level changed, closes the old mining segment at the old rate.
-async function refresh(id) {
-  let u = await get(id), err = false;
-  const now = Date.now();
-  if (u.wallet && now - u.wcheck > WALLET_TTL) {
-    try {
-      const w = await readWallet(u.wallet);
-      await run('UPDATE users SET wbal=?, ton=?, wcheck=? WHERE id=?', [w.wbal, w.ton, now, id]);
-    } catch (e) {
-      err = true; console.error('wallet read failed:', e.message);
-      await run('UPDATE users SET wcheck=? WHERE id=?', [now - WALLET_TTL + 10000, id]);
+  for (const ch of L.DEFAULT_CHANNELS) {
+    await run("INSERT OR IGNORE INTO sources(type, value, active) VALUES('tg_channel', ?, 1)", [ch]);
+  }
+  for (const feed of L.DEFAULT_RSS_FEEDS) {
+    await run("INSERT OR IGNORE INTO sources(type, value, active) VALUES('rss', ?, 1)", [feed]);
+  }
+  if (X_FEED_URL) {
+    for (const u of X_FEED_URL.split(',').map(s => s.trim()).filter(Boolean)) {
+      await run("INSERT OR IGNORE INTO sources(type, value, active) VALUES('x_feed', ?, 1)", [u]);
     }
-    u = await get(id);
   }
-  const want = L.dailyFor(u.wallet ? u.wbal : 0);
-  if (want !== u.rate) {
-    await run('UPDATE users SET acc=?, seg_start=?, rate=? WHERE id=?', [L.round6(L.pending(u, now)), now, want, id]);
-    u = await get(id);
+
+  const seedTargets = ['@Alkatiba21', ...(TARGET_CHANNELS || '').split(',')];
+  for (const rawTarget of seedTargets) {
+    const t = L.cleanTargetChannel(rawTarget);
+    if (t) {
+      await run("INSERT OR IGNORE INTO targets(chat_id, active) VALUES(?, 1)", [t]);
+    }
   }
-  return { u, err };
 }
 
-function view(u, walletError = false) {
-  const now = Date.now(), wb = u.wallet ? u.wbal : 0;
-  const baseLink = BOT_LINK || 'https://t.me/bellcoinbct_bot/app';
-  const sep = baseLink.includes('?') ? '&' : '?';
-  return {
-    now, name: u.name, balance: u.balance, mined: u.mined,
-    pending: L.pending(u, now), rate: u.rate, endsAt: u.started + L.DAY, level: L.levelFor(wb),
-    wallet: u.wallet || null, walletBalance: wb, tonBalance: u.wallet ? u.ton : 0, walletError,
-    refs: u.refs, link: `${baseLink}${sep}startapp=r${u.id}`,
-    loginStreak: u.streak, lastLogin: u.last_login,
-    withdraw: { minBalance: WITHDRAW_MIN_BALANCE, minWallet: WITHDRAW_MIN_WALLET, open: false,
-      eligible: u.balance >= WITHDRAW_MIN_BALANCE && wb >= WITHDRAW_MIN_WALLET },
-  };
+async function getTemplate() {
+  const r = await run("SELECT v FROM settings WHERE k='template'");
+  return (r.rows && r.rows[0] && r.rows[0].v) || L.DEFAULT_TEMPLATE;
 }
 
-// ---- HTTP ----
-const app = express();
-app.set('trust proxy', 1);
-app.use(express.json({ limit: '20kb' }));
+async function setEnabledState(val) {
+  isRunning = !!val;
+  await run("INSERT INTO settings(k, v) VALUES('enabled', ?) ON CONFLICT(k) DO UPDATE SET v=excluded.v", [
+    isRunning ? '1' : '0',
+  ]);
+}
 
-app.get('/tonconnect-manifest.json', (req, res) => {
-  res.set('Access-Control-Allow-Origin', '*');
-  const fileInPublic = path.join(__dirname, 'public', 'tonconnect-manifest.json');
-  const fileInRoot = path.join(__dirname, 'tonconnect-manifest.json');
-  if (fs.existsSync(fileInPublic)) return res.sendFile(fileInPublic);
-  if (fs.existsSync(fileInRoot)) return res.sendFile(fileInRoot);
-  const origin = WEBAPP_URL ? new URL(WEBAPP_URL).origin : `${req.protocol}://${req.get('host')}`;
-  res.json({
-    url: origin,
-    name: 'BELLGRAM',
-    iconUrl: `${origin}/icon.png`
+async function getActiveTargets() {
+  const r = await run("SELECT chat_id FROM targets WHERE active=1 ORDER BY id ASC");
+  return (r.rows || []).map(x => String(x.chat_id));
+}
+
+function decodeHtml(str) {
+  return String(str || '')
+    .replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, '$1')
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/<\/p>/gi, '\n')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&nbsp;/g, ' ')
+    .replace(/[ \t]+/g, ' ')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
+
+async function fetchTelegramChannel(username) {
+  const url = `https://t.me/s/${encodeURIComponent(username)}`;
+  const res = await fetch(url, {
+    headers: { 'User-Agent': 'Mozilla/5.0 (compatible; CryptoNewsBot/1.0)' },
+    signal: AbortSignal.timeout(10000),
   });
-});
+  if (!res.ok) return [];
+  const html = await res.text();
+  const blocks = [...html.matchAll(/class="tgme_widget_message_text[^"]*"[^>]*>([\s\S]*?)<\/div>/g)];
+  return blocks
+    .slice(-8)
+    .map(m => decodeHtml(m[1]))
+    .filter(txt => txt.length >= 20)
+    .map(txt => ({
+      source: `@${username}`,
+      titleEn: txt.split('\n')[0].slice(0, 120),
+      bodyEn: txt.slice(0, 700),
+      titleAr: 'خبر من قناة متابعة',
+      bodyAr: txt.slice(0, 700),
+      url: `https://t.me/${username}`,
+    }));
+}
 
+async function fetchRssOrXFeed(feedUrl, labelPrefix = 'News') {
+  const res = await fetch(feedUrl, {
+    headers: { 'User-Agent': 'Mozilla/5.0 (compatible; CryptoNewsBot/1.0)' },
+    signal: AbortSignal.timeout(10000),
+  });
+  if (!res.ok) return [];
+  const xml = await res.text();
+  const items = [...xml.matchAll(/<item[\s\S]*?<\/item>/gi)];
+  const host = (() => {
+    try { return new URL(feedUrl).hostname.replace(/^www\./, ''); } catch { return labelPrefix; }
+  })();
+
+  return items.slice(0, 8).map(block => {
+    const raw = block[0];
+    const title = decodeHtml((raw.match(/<title[^>]*>([\s\S]*?)<\/title>/i) || [])[1] || '');
+    const desc = decodeHtml((raw.match(/<description[^>]*>([\s\S]*?)<\/description>/i) || [])[1] || '');
+    const link = decodeHtml((raw.match(/<link[^>]*>([\s\S]*?)<\/link>/i) || [])[1] || feedUrl);
+    const summary = (desc || title).slice(0, 650);
+    return {
+      source: `${labelPrefix} (${host})`,
+      titleEn: title.slice(0, 140) || 'Crypto & Market Update',
+      bodyEn: summary,
+      titleAr: title.slice(0, 140) || 'تحديث السوق والأحداث',
+      bodyAr: summary,
+      url: link,
+    };
+  }).filter(x => x.titleEn || x.bodyEn);
+}
+
+async function fetchCryptoMarketAlerts(template, targets) {
+  const coins = [
+    { id: 'bitcoin', symbol: 'BTC', name: 'Bitcoin' },
+    { id: 'ethereum', symbol: 'ETH', name: 'Ethereum' },
+    { id: 'binancecoin', symbol: 'BNB', name: 'BNB' },
+    { id: 'solana', symbol: 'SOL', name: 'Solana' },
+    { id: 'the-open-network', symbol: 'TON', name: 'Toncoin' },
+    { id: 'ripple', symbol: 'XRP', name: 'XRP' },
+  ];
+
+  const ids = coins.map(c => c.id).join(',');
+  const res = await fetch(
+    `https://api.coingecko.com/api/v3/simple/price?ids=${ids}&vs_currencies=usd&include_24hr_change=true`,
+    { signal: AbortSignal.timeout(10000) }
+  );
+  if (!res.ok) return 0;
+  const data = await res.json();
+  let published = 0;
+
+  latestPrices = coins.map(c => {
+    const row = data[c.id] || {};
+    return {
+      symbol: c.symbol,
+      name: c.name,
+      price: Number(row.usd || 0),
+      change24h: Number(row.usd_24h_change || 0),
+    };
+  });
+
+  for (const item of latestPrices) {
+    if (!item.price || Math.abs(item.change24h) < priceThreshold) continue;
+    const bucket = Math.floor(Date.now() / (4 * 3600 * 1000));
+    const dir = item.change24h >= 0 ? 'up' : 'down';
+    const h = L.newsHash(`price:${item.symbol}:${dir}:${bucket}`);
+    const exists = await run('SELECT 1 FROM posted_items WHERE hash=?', [h]);
+    if (exists.rows && exists.rows.length) continue;
+
+    const msg = L.formatPriceAlert(item, template);
+    for (const chatId of targets) {
+      await bot.sendMessage(chatId, msg, { parse_mode: 'Markdown', disable_web_page_preview: true });
+    }
+    await run('INSERT OR IGNORE INTO posted_items(hash, source, title, posted_at) VALUES(?, ?, ?, ?)', [
+      h,
+      'Market Tracker',
+      `${item.symbol} ${item.change24h.toFixed(2)}%`,
+      Date.now(),
+    ]);
+    published++;
+  }
+  return published;
+}
+
+async function runNewsCycle(force = false) {
+  if (!isRunning && !force) return { skipped: true, published: 0 };
+  lastCycleAt = Date.now();
+  lastError = null;
+
+  try {
+    const targets = await getActiveTargets();
+    if (!targets.length) return { skipped: false, published: 0, reason: 'no_targets' };
+
+    const template = await getTemplate();
+    const srcRows = await run('SELECT type, value FROM sources WHERE active=1');
+    const collected = [];
+
+    for (const s of srcRows.rows || []) {
+      try {
+        if (s.type === 'tg_channel') {
+          collected.push(...(await fetchTelegramChannel(s.value)));
+        } else if (s.type === 'rss') {
+          collected.push(...(await fetchRssOrXFeed(s.value, 'Global News')));
+        } else if (s.type === 'x_feed') {
+          collected.push(...(await fetchRssOrXFeed(s.value, 'X / Twitter')));
+        }
+      } catch (e) {
+        console.warn(`Source fetch error [${s.value}]:`, e.message);
+      }
+    }
+
+    let published = 0;
+    for (const item of collected) {
+      const h = L.newsHash(`${item.titleEn} ${item.bodyEn}`);
+      const seen = await run('SELECT 1 FROM posted_items WHERE hash=?', [h]);
+      if (seen.rows && seen.rows.length) continue;
+
+      const formatted = L.formatBilingualNews({ ...item, template });
+      for (const chatId of targets) {
+        await bot.sendMessage(chatId, formatted, {
+          parse_mode: 'Markdown',
+          disable_web_page_preview: true,
+        });
+      }
+      await run('INSERT OR IGNORE INTO posted_items(hash, source, title, posted_at) VALUES(?, ?, ?, ?)', [
+        h,
+        item.source,
+        item.titleEn,
+        Date.now(),
+      ]);
+      published++;
+      if (published >= 5) break;
+    }
+
+    published += await fetchCryptoMarketAlerts(template, targets);
+    return { skipped: false, published };
+  } catch (e) {
+    lastError = e.message;
+    console.error('News cycle error:', e);
+    return { skipped: false, published: 0, error: e.message };
+  }
+}
+
+const app = express();
+app.use(express.json({ limit: '50kb' }));
 app.use(express.static(path.join(__dirname, 'public')));
 app.get('/', (req, res) => {
-  const pubIndex = path.join(__dirname, 'public', 'index.html');
-  res.sendFile(fs.existsSync(pubIndex) ? pubIndex : path.join(__dirname, 'index.html'));
+  const pubIdx = path.join(__dirname, 'public', 'index.html');
+  res.sendFile(fs.existsSync(pubIdx) ? pubIdx : path.join(__dirname, 'index.html'));
 });
 
-const ah = fn => (req, res, next) => fn(req, res, next).catch(e => { console.error(e); res.status(500).json({ error: 'server' }); });
-
-app.use('/api', ah(async (req, res, next) => {
-  const v = L.verifyInitData(req.get('x-init') || '', BOT_TOKEN);
-  if (!v) return res.status(401).json({ error: 'unauthorized' });
-  const now = Date.now(), id = v.user.id;
-  const name = String(v.user.first_name || v.user.username || 'User').slice(0, 64);
-  const made = await run('INSERT OR IGNORE INTO users(id,name,started,seg_start,rate) VALUES(?,?,?,?,500)', [id, name, now, now]);
-
-  const cur = await get(id);
-  if (made.rowsAffected === 1 && cur && !cur.referred_by) {
-    const m = /^r(\d+)$/.exec(v.start || ''), ref = m ? Number(m[1]) : 0;
-    if (ref && ref !== id && await get(ref)) {
-      await db.batch([
-        { sql: 'UPDATE users SET balance=balance+?, refs=refs+1 WHERE id=?', args: [REF_BONUS, ref] },
-        { sql: 'UPDATE users SET balance=balance+?, referred_by=? WHERE id=?', args: [REF_BONUS, ref, id] }
-      ], 'write');
-    }
-  } else {
-    await run('UPDATE users SET name=? WHERE id=?', [name, id]);
-  }
-  req.uid = id; next();
-}));
-
-app.get('/api/me', ah(async (req, res) => { const { u, err } = await refresh(req.uid); res.json(view(u, err)); }));
-
-app.post('/api/claim', ah(async (req, res) => {
-  const { err } = await refresh(req.uid);
-  const u = await get(req.uid), now = Date.now(), p = L.pending(u, now);
-  if (p >= MIN_CLAIM) {
-    await run('UPDATE users SET balance=?, mined=?, started=?, seg_start=?, acc=0 WHERE id=?',
-      [L.round6(u.balance + p), L.round6(u.mined + p), now, now, u.id]);
-  }
-  res.json(view(await get(req.uid), err));
-}));
-
-app.post('/api/daily-login', ah(async (req, res) => {
-  const { err } = await refresh(req.uid);
-  const u = await get(req.uid), now = Date.now();
-  if (!u.last_login || now - u.last_login >= L.DAY) {
-    const streak = u.last_login && now - u.last_login > 2 * L.DAY ? 1 : (u.streak % 7) + 1;
-    await run('UPDATE users SET balance=?, streak=?, last_login=? WHERE id=?',
-      [L.round6(u.balance + streak * 10), streak, now, u.id]);
-  }
-  res.json(view(await get(req.uid), err));
-}));
-
-app.get('/api/ton-proof-payload', (req, res) => res.json({ payload: L.mkPayload(BOT_TOKEN, req.uid) }));
-
-app.post('/api/wallet', ah(async (req, res) => {
-  const b = req.body || {}, now = Date.now(), cur = await get(req.uid);
-  if (b.disconnect) {
-    await run('UPDATE users SET wallet=NULL, wbal=0, ton=0, wcheck=0 WHERE id=?', [req.uid]);
-  } else {
-    const domain = WEBAPP_URL ? new URL(WEBAPP_URL).host : req.get('host');
-    const r = await L.verifyTonProof({ account: b.account, proof: b.proof },
-      { secret: BOT_TOKEN, uid: req.uid, domain, getPublicKey });
-    if (!r.ok) return res.status(r.error === 'lookup' ? 503 : 400).json({ error: r.error });
-
-    const taken = await run('SELECT 1 FROM users WHERE wallet=? AND id!=?', [r.address, req.uid]);
-    if (taken.rows && taken.rows.length > 0) {
-      return res.status(409).json({ error: 'wallet_taken' });
-    }
-
-    const prevWallet = cur.wallet || cur.last_wallet;
-    if (prevWallet && prevWallet !== r.address && now - cur.wallet_changed < L.DAY) {
-      return res.status(429).json({ error: 'wallet_locked' });
-    }
-
-    const changedAt = (!prevWallet || prevWallet !== r.address) ? now : (cur.wallet_changed || now);
-    await run('UPDATE users SET wallet=?, last_wallet=?, wbal=0, ton=0, wcheck=0, wallet_changed=? WHERE id=?',
-      [r.address, r.address, changedAt, req.uid]);
-  }
-  const { u, err } = await refresh(req.uid);
-  res.json(view(u, err));
-}));
-
-let server;
-initDB().then(() => {
-  server = app.listen(PORT, () => console.log('API on', PORT));
-}).catch(e => {
-  console.error('Database initialization failed:', e);
-  process.exit(1);
-});
-
-// ---- Telegram bot ----
-const bot = new TelegramBot(BOT_TOKEN, { polling: true });
-bot.getMe().then(me => {
-  if (!BOT_LINK && me && me.username) {
-    BOT_LINK = `https://t.me/${me.username}/app`;
-    console.log('Auto-configured BOT_LINK:', BOT_LINK);
-  }
-}).catch(e => console.error('Failed to get bot info:', e.message));
-
-bot.on('polling_error', e => console.error('polling_error', e.code, e.message));
-bot.onText(/\/start(?:\s+(.+))?/, (msg, match) => {
-  const param = match && match[1] ? match[1].trim() : '';
-  let appUrl = WEBAPP_URL || '';
-  if (appUrl && param) {
-    const sep = appUrl.includes('?') ? '&' : '?';
-    appUrl = `${appUrl}${sep}tgWebAppStartParam=${encodeURIComponent(param)}`;
-  }
-  const opts = appUrl ? {
-    reply_markup: { inline_keyboard: [[{ text: '🔔 Open BELLGRAM', web_app: { url: appUrl } }]] }
-  } : {};
-  bot.sendMessage(msg.chat.id,
-    '🔔 Welcome to BELLGRAM Mining!\n\n' +
-    'Ring the bell and start your daily crypto mining adventure on Telegram.\n\n' +
-    '⛏️ Mine and collect BELL every day\n' +
-    '💎 Hold BELLGRAM in your TON wallet to boost your rate\n' +
-    '🏅 Climb through 6 mining leagues\n' +
-    '📅 Claim daily login streak bonuses\n' +
-    '👥 Invite friends and earn 50 BELL for every join\n\n' +
-    '👇 Start your journey with the button below.',
-    opts
-  ).catch(e => console.error('sendMessage error:', e.message));
-});
-
-function shutdown() {
-  bot.stopPolling().catch(() => {}).finally(() => {
-    if (server) server.close(() => process.exit(0));
-    else process.exit(0);
+app.get('/api/state', async (req, res) => {
+  const [sources, targets, postedCount, template] = await Promise.all([
+    run('SELECT id, type, value, active FROM sources ORDER BY id ASC'),
+    run('SELECT id, chat_id, active FROM targets ORDER BY id ASC'),
+    run('SELECT COUNT(*) AS c FROM posted_items'),
+    getTemplate(),
+  ]);
+  res.json({
+    running: isRunning,
+    lastCycleAt,
+    lastError,
+    publishedCount: Number((postedCount.rows && postedCount.rows[0] && postedCount.rows[0].c) || 0),
+    template,
+    sources: sources.rows || [],
+    targets: targets.rows || [],
+    prices: latestPrices,
   });
-}
-process.on('SIGTERM', shutdown);
-process.on('SIGINT', shutdown);
+});
+
+app.post('/api/toggle', async (req, res) => {
+  await setEnabledState(Boolean(req.body && req.body.running));
+  res.json({ ok: true, running: isRunning });
+});
+
+app.post('/api/template', async (req, res) => {
+  const tpl = String((req.body && req.body.template) || '').trim();
+  if (!tpl) return res.status(400).json({ error: 'empty_template' });
+  await run("INSERT INTO settings(k, v) VALUES('template', ?) ON CONFLICT(k) DO UPDATE SET v=excluded.v", [tpl]);
+  res.json({ ok: true, template: tpl });
+});
+
+app.post('/api/sources', async (req, res) => {
+  const type = String((req.body && req.body.type) || 'tg_channel');
+  const rawVal = String((req.body && req.body.value) || '').trim();
+  const value = type === 'tg_channel' ? L.cleanChannelName(rawVal) : rawVal;
+  if (!value) return res.status(400).json({ error: 'invalid_value' });
+  await run('INSERT OR IGNORE INTO sources(type, value, active) VALUES(?, ?, 1)', [type, value]);
+  res.json({ ok: true });
+});
+
+app.post('/api/targets', async (req, res) => {
+  const chatId = L.cleanTargetChannel(req.body && req.body.chat_id);
+  if (!chatId) return res.status(400).json({ error: 'invalid_target' });
+  await run('INSERT OR IGNORE INTO targets(chat_id, active) VALUES(?, 1)', [chatId]);
+  res.json({ ok: true, chat_id: chatId });
+});
+
+app.post('/api/fetch-now', async (req, res) => {
+  const out = await runNewsCycle(true);
+  res.json({ ok: true, ...out });
+});
+
+const isAdmin = msg => !ADMIN || String(msg.chat && msg.chat.id) === ADMIN || String(msg.from && msg.from.id) === ADMIN;
+
+bot.onText(/^\/start(?:@\w+)?/, msg => {
+  bot.sendMessage(
+    msg.chat.id,
+    '📰 *Crypto & Events Auto-Publisher*\n\n' +
+      'القناة التجريبية المفعّلة: `@Alkatiba21`\n\n' +
+      'الأوامر:\n' +
+      '• `/on` — تشغيل النشر التلقائي\n' +
+      '• `/off` — إيقاف النشر التلقائي\n' +
+      '• `/addtarget @channel` — إضافة قناة للنشر\n' +
+      '• `/addsource @channel_or_url` — إضافة مصدر جديد\n' +
+      '• `/fetch` — جلب ونشر الآن\n' +
+      '• `/status` — عرض الحالة',
+    { parse_mode: 'Markdown' }
+  ).catch(() => {});
+});
+
+bot.onText(/^\/on(?:@\w+)?$/, async msg => {
+  if (!isAdmin(msg)) return;
+  await setEnabledState(true);
+  bot.sendMessage(msg.chat.id, '✅ تم تشغيل النشر التلقائي / Auto-publishing enabled.').catch(() => {});
+});
+
+bot.onText(/^\/off(?:@\w+)?$/, async msg => {
+  if (!isAdmin(msg)) return;
+  await setEnabledState(false);
+  bot.sendMessage(msg.chat.id, '⏸️ تم إيقاف النشر التلقائي / Auto-publishing paused.').catch(() => {});
+});
+
+bot.onText(/^\/addtarget(?:@\w+)?\s+(.+)/, async (msg, m) => {
+  if (!isAdmin(msg)) return;
+  const target = L.cleanTargetChannel(m[1]);
+  if (!target) return bot.sendMessage(msg.chat.id, '❌ معرّف قناة غير صالح.').catch(() => {});
+  await run('INSERT OR IGNORE INTO targets(chat_id, active) VALUES(?, 1)', [target]);
+  bot.sendMessage(msg.chat.id, `✅ تمت إضافة قناة النشر: ${target}`).catch(() => {});
+});
+
+bot.onText(/^\/addsource(?:@\w+)?\s+(.+)/, async (msg, m) => {
+  if (!isAdmin(msg)) return;
+  const raw = m[1].trim();
+  const isUrl = /^https?:\/\//i.test(raw);
+  const type = isUrl ? (/x\.com|twitter\.com|nitter/i.test(raw) ? 'x_feed' : 'rss') : 'tg_channel';
+  const val = type === 'tg_channel' ? L.cleanChannelName(raw) : raw;
+  if (!val) return bot.sendMessage(msg.chat.id, '❌ مصدر غير صالح.').catch(() => {});
+  await run('INSERT OR IGNORE INTO sources(type, value, active) VALUES(?, ?, 1)', [type, val]);
+  bot.sendMessage(msg.chat.id, `✅ تمت إضافة المصدر (${type}): ${val}`).catch(() => {});
+});
+
+bot.onText(/^\/settemplate(?:@\w+)?\s+([\s\S]+)/, async (msg, m) => {
+  if (!isAdmin(msg)) return;
+  const tpl = m[1].trim();
+  await run("INSERT INTO settings(k, v) VALUES('template', ?) ON CONFLICT(k) DO UPDATE SET v=excluded.v", [tpl]);
+  bot.sendMessage(msg.chat.id, '✅ تم تحديث قالب النشر (الماكيت).').catch(() => {});
+});
+
+bot.onText(/^\/fetch(?:@\w+)?$/, async msg => {
+  if (!isAdmin(msg)) return;
+  const r = await runNewsCycle(true);
+  bot.sendMessage(msg.chat.id, `🔄 تم الفحص والنشر. عدد المنشورات الجديدة: ${r.published || 0}`).catch(() => {});
+});
+
+bot.onText(/^\/status(?:@\w+)?$/, async msg => {
+  if (!isAdmin(msg)) return;
+  const targets = await getActiveTargets();
+  const srcs = await run('SELECT COUNT(*) AS c FROM sources WHERE active=1');
+  bot.sendMessage(
+    msg.chat.id,
+    `📊 الحالة: ${isRunning ? 'شغال ✅' : 'متوقف ⏸️'}\n` +
+      `📡 المصادر النشطة: ${(srcs.rows && srcs.rows[0] && srcs.rows[0].c) || 0}\n` +
+      `📣 قنوات النشر: ${targets.join(', ') || 'لا يوجد'}`,
+    { disable_web_page_preview: true }
+  ).catch(() => {});
+});
+
+initDB()
+  .then(() => {
+    app.listen(PORT, () => console.log('News & Market Bot server running on port', PORT));
+    setInterval(() => runNewsCycle(false), intervalMs);
+    setTimeout(() => runNewsCycle(false), 4000);
+  })
+  .catch(err => {
+    console.error('Init DB failed:', err);
+    process.exit(1);
+  });
