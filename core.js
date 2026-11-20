@@ -102,7 +102,8 @@ function createCore({ db, bot, cfg, fetchFn = fetch, sleep = ms => new Promise(r
     // Only the first run writes the default template; a template saved from the panel survives restarts.
     await run("INSERT OR IGNORE INTO settings(k, v) VALUES('template', ?)", [L.DEFAULT_TEMPLATE]);
     await run("INSERT OR IGNORE INTO settings(k, v) VALUES('buttons', ?)", [JSON.stringify(L.DEFAULT_BUTTONS)]);
-    await syncCustomEmojiPacks();
+    // Do not block database/server startup on Telegram API or an unavailable token.
+    syncCustomEmojiPacks().catch(e => console.warn('Custom emoji sync failed:', e.message));
 
     for (const ch of L.DEFAULT_CHANNELS) await run("INSERT OR IGNORE INTO sources(type, value, active) VALUES('tg_channel', ?, 1)", [ch]);
     for (const feed of L.DEFAULT_RSS_FEEDS) await run("INSERT OR IGNORE INTO sources(type, value, active) VALUES('rss', ?, 1)", [feed]);
