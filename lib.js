@@ -44,45 +44,87 @@ const DEFAULT_TEMPLATE = [
   '[👻 ADMIN](https://t.me/g_h_o_s_t_14)|[👿  𝐆𝐇𝐎𝐒𝐓](https://t.me/CRGhosts21) | [✈️Alkatiba21](https://t.me/Alkatiba21) | [💬Group](https://t.me/HETANCR22)| [🗯 Referral](https://t.me/REFERRA21)| [🎥 youtube](https://www.youtube.com/@GHOSTS21-CG)|[💬Twitter](https://x.com/Ghost_818)|[📸Instagram](https://www.instagram.com/mr1997art/)|[📨 Share](https://t.me/share/url?url=https://t.me/Alkatiba21&text=Hey%20You)',
 ].join('\n');
 
+const cleanSlug = s => String(s || '').trim()
+  .replace(/^https?:\/\/(t\.me|telegram\.me)\/(s\/)?/i, '')
+  .replace(/^@+/, '').split('/')[0].split('?')[0].trim();
+
+// Telegram channel to READ from (username only).
 function cleanChannelName(input) {
-  if (!input) return '';
-  return String(input)
-    .trim()
-    .replace(/^https?:\/\/(t\.me|telegram\.me)\/s\//i, '')
-    .replace(/^https?:\/\/(t\.me|telegram\.me)\//i, '')
-    .replace(/^@+/, '')
-    .split('/')[0]
-    .split('?')[0]
-    .trim();
+  const s = cleanSlug(input);
+  return /^[A-Za-z0-9_]{4,64}$/.test(s) ? s : '';
 }
 
+// Chat to POST to: numeric id or @username.
 function cleanTargetChannel(input) {
-  if (!input) return '';
-  const raw = String(input).trim();
-  if (/^-?\d+$/.test(raw)) return raw;
-  const cleaned = raw
-    .replace(/^https?:\/\/(t\.me|telegram\.me)\//i, '')
-    .replace(/^@+/, '')
-    .split('/')[0]
-    .trim();
-  return cleaned ? `@${cleaned}` : '';
+  const raw = String(input || '').trim();
+  if (/^-?\d{5,20}$/.test(raw)) return raw;
+  const s = cleanSlug(raw);
+  return /^[A-Za-z0-9_]{4,64}$/.test(s) ? `@${s}` : '';
 }
 
 function cleanXHandle(input) {
-  if (!input) return '';
-  const s = String(input).trim();
-  if (/^https?:\/\//i.test(s)) return s;
-  return s.replace(/^@+/, '').split('/')[0].split('?')[0].trim();
+  const s = String(input || '').trim();
+  if (/^https?:\/\//i.test(s)) return cleanFeedUrl(s);
+  const h = s.replace(/^@+/, '').split('/')[0].split('?')[0].trim();
+  return /^[A-Za-z0-9_]{1,30}$/.test(h) ? h : '';
 }
 
-function stripLinksAndHandles(text) {
-  return String(text || '')
+function cleanFeedUrl(input) {
+  const s = String(input || '').trim();
+  return /^https?:\/\/[^\s<>"']{4,500}$/i.test(s) ? s : '';
+}
+
+// Removes links, @handles, source attributions (channel/group/site names), and Markdown-breaking characters.
+function stripLinksAndHandles(text, sourceName = '') {
+  let cleaned = String(text || '');
+
+  // 1. Remove explicit source name / channel / site domain if provided
+  if (sourceName && String(sourceName).trim()) {
+    const rawSrc = String(sourceName).trim();
+    const candidates = new Set([rawSrc]);
+    if (/^https?:\/\//i.test(rawSrc)) {
+      try {
+        const u = new URL(rawSrc);
+        const host = u.hostname.replace(/^www\./i, '');
+        candidates.add(host);
+        const base = host.split('.')[0];
+        if (base && base.length >= 3) candidates.add(base);
+      } catch (_) {}
+    } else {
+      const slug = rawSrc.replace(/^@+/, '').trim();
+      if (slug) candidates.add(slug);
+    }
+    for (const c of candidates) {
+      const esc = c.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      cleaned = cleaned.replace(new RegExp(esc, 'gi'), '');
+    }
+  }
+
+  // 2. Remove all URLs / domains / t.me / x.com / twitter.com / telegram.me links
+  cleaned = cleaned
     .replace(/https?:\/\/\S+/gi, '')
     .replace(/www\.\S+/gi, '')
-    .replace(/t\.me\/\S+/gi, '')
-    .replace(/@[A-Za-z0-9_]+/g, '')
-    .replace(/[\*_`]+/g, '')
+    .replace(/\b(?:t|telegram)\.me\/\S+/gi, '')
+    .replace(/\b(?:x|twitter)\.com\/\S+/gi, '')
+    .replace(/\b[a-z0-9-]+\.(?:com|net|org|io|co|news|me|xyz|tv|app|info|biz|ai)\/\S*/gi, '')
+    .replace(/@[A-Za-z0-9_]+/g, '');
+
+  // 3. Remove common source attribution lines & prefixes/suffixes (Arabic & English)
+  cleaned = cleaned
+    // Standalone or trailing attribution lines: المصدر: ... / منقول من ... / عبر ... / قناة ... / جروب ... / موقع ... / Source: ... / Via ...
+    .replace(/(?:^|\n)\s*(?:📌|🔗|📰|📢|📣|📡|•|-|—|–|\|)?\s*(?:المصدر|منقول\s*من|نقل[ااً]\s*عن|عبر|بواسطة|تابعونا\s*على|اشترك\s*في|للمزيد|قراءة\s*المزيد|اقرأ\s*المزيد|المقال\s*الأصلي|source|via|credit|read\s*more|full\s*story|originally\s*published)\s*[:\-–—|]?\s*[^\n]*/gi, '')
+    // Channel / Group / Site signature lines (e.g., "قناة كريبتو نيوز", "جروب ...", "موقع ...")
+    .replace(/(?:^|\n)\s*(?:📌|🔗|📰|📢|📣|📡|⚡|🔴|🟢|🔵|•|-|—|–|\|)?\s*(?:قناة|جروب|مجموعة|شبكة|صحيفة|موقع|منصة)\s+[^\n]{2,60}\s*(?=\n|$)/gi, '')
+    // Trailing pipe/dash source suffixes on a line (e.g., "... | قناة كريبتو نيوز" or "... - CoinTelegraph" or "... — WatcherGuru")
+    .replace(/\s*[\|—–]\s*(?:قناة|جروب|موقع|شبكة)?\s*[\p{L}\p{N}_ .-]{2,45}$/gmu, '')
+    // Leading channel/site tag with colon (e.g., "قناة كريبتو نيوز: ..." or "كريبتو نيوز:")
+    .replace(/^\s*(?:قناة|جروب|موقع|شبكة)\s+[^\n:]{2,40}\s*:\s*/gmi, '');
+
+  // 4. Clean Markdown-breaking characters and normalize whitespace
+  return cleaned
+    .replace(/[\*_`\[\]\\]+/g, '')
     .replace(/[ \t]+/g, ' ')
+    .replace(/\n[ \t]+/g, '\n')
     .replace(/\n{3,}/g, '\n\n')
     .trim();
 }
@@ -108,57 +150,95 @@ function newsHash(text) {
   return crypto.createHash('sha256').update(norm).digest('hex');
 }
 
+const hasContent = text => /[\p{L}\p{N}]/u.test(stripLinksAndHandles(text));
+
+// Cuts on a word boundary (by code points, so emoji are never split).
+function truncate(s, n) {
+  const cps = [...String(s || '')];
+  if (cps.length <= n) return cps.join('');
+  const cut = cps.slice(0, n).join('');
+  const sp = cut.lastIndexOf(' ');
+  return (sp > n * 0.6 ? cut.slice(0, sp) : cut).trimEnd() + '…';
+}
+
+function isArabic(text) {
+  const t = String(text || '');
+  const letters = (t.match(/\p{L}/gu) || []).length;
+  if (!letters) return false;
+  return (t.match(/[؀-ۿ]/g) || []).length / letters > 0.4;
+}
+
+const DEFAULT_PROMO = [
+  'sponsored', 'promo code', 'referral code', 'referral link', 'use code', 'sign up now', 'register now',
+  'join now', 'claim your', 'limited time', 'deposit bonus', 'welcome bonus', 'trading competition',
+  'trading contest', 'win up to', 'prize pool',
+  'إعلان ممول', 'محتوى ممول', 'كود الدعوة', 'كود الإحالة', 'كود خصم', 'سجل الآن', 'سجّل الآن',
+  'انضم الآن', 'مسابقة تداول', 'جوائز تصل',
+];
+function isPromo(text, extra = []) {
+  const t = String(text || '').toLowerCase();
+  if (/(^|\s)#ad(\s|$)/i.test(t)) return true;
+  return DEFAULT_PROMO.concat(extra).some(k => k && t.includes(String(k).toLowerCase()));
+}
+
+const parseDate = s => { const t = Date.parse(String(s || '').trim()); return Number.isFinite(t) ? t : null; };
+
+// A function replacer is required: a plain string would interpret "$&", "$'" and "$$" inside the news text.
 function applyTemplate(template, body) {
   const tpl = template && String(template).trim() ? String(template) : DEFAULT_TEMPLATE;
   const boldContent = toBoldLines(body);
   if (/\{\{\s*NEWS\s*\}\}/i.test(tpl)) {
-    return tpl.replace(/\{\{\s*NEWS\s*\}\}/gi, boldContent);
+    return tpl.replace(/\{\{\s*NEWS\s*\}\}/gi, () => boldContent);
   }
   const lines = tpl.split('\n');
   const mid = Math.max(1, Math.floor(lines.length / 2));
   return [...lines.slice(0, mid), boldContent, ...lines.slice(mid)].join('\n');
 }
 
-function formatCleanBilingualPost({ bodyAr, bodyEn, template }) {
-  const cleanAr = stripLinksAndHandles(bodyAr).slice(0, 550);
-  const cleanEn = stripLinksAndHandles(bodyEn).slice(0, 550);
+// bodyAr = Arabic version (or the original when there is no translation), bodyEn = the original text.
+function formatCleanBilingualPost({ bodyAr, bodyEn, template, sourceName = '' }) {
+  const cleanAr = truncate(stripLinksAndHandles(bodyAr, sourceName), 550);
+  const cleanEn = truncate(stripLinksAndHandles(bodyEn, sourceName), 550);
   const parts = [];
   if (cleanAr) parts.push(cleanAr);
   if (cleanEn && cleanEn.toLowerCase() !== cleanAr.toLowerCase()) parts.push(cleanEn);
-  const body = parts.join('\n');
-  return applyTemplate(template, body);
+  return applyTemplate(template, parts.join('\n'));
 }
 
 function formatPriceAlert(item, template) {
-  const up = item.change24h >= 0;
+  const change = Number(item.change24h) || 0, price = Number(item.price) || 0;
+  const up = change >= 0;
   const dirAr = up ? 'ارتفاع' : 'انخفاض';
   const dirEn = up ? 'UP' : 'DOWN';
   const sign = up ? '+' : '';
-  const priceStr =
-    item.price >= 1
-      ? Number(item.price).toLocaleString('en-US', { maximumFractionDigits: 2 })
-      : Number(item.price).toFixed(6);
-
+  const priceStr = price >= 1 ? price.toLocaleString('en-US', { maximumFractionDigits: 2 }) : price.toFixed(6);
   const body = [
-    `${dirAr} ${item.name} (${item.symbol}) بنسبة ${sign}${item.change24h.toFixed(2)}% خلال 24 ساعة — السعر $${priceStr}`,
-    `${item.symbol} ${dirEn} ${sign}${item.change24h.toFixed(2)}% (24h) — Price $${priceStr}`,
+    `${dirAr} ${item.name} (${item.symbol}) بنسبة ${sign}${change.toFixed(2)}% خلال 24 ساعة — السعر $${priceStr}`,
+    `${item.symbol} ${dirEn} ${sign}${change.toFixed(2)}% (24h) — Price $${priceStr}`,
   ].join('\n');
-
   return applyTemplate(template, body);
 }
 
+// Telegram Mini App initData (HMAC) check, used to protect the admin panel API.
+function verifyInitData(init, token, maxAgeSec = 86400, nowSec = Date.now() / 1000) {
+  if (!init || !token) return null;
+  const p = new URLSearchParams(init), hash = p.get('hash');
+  if (!hash || !/^[0-9a-f]{64}$/i.test(hash)) return null;
+  p.delete('hash');
+  const str = [...p.entries()].map(([k, v]) => `${k}=${v}`).sort().join('\n');
+  const key = crypto.createHmac('sha256', 'WebAppData').update(token).digest();
+  const calc = crypto.createHmac('sha256', key).update(str).digest();
+  if (!crypto.timingSafeEqual(Buffer.from(hash, 'hex'), calc)) return null;
+  const ad = Number(p.get('auth_date'));
+  if (!ad || nowSec - ad > maxAgeSec) return null;
+  let user; try { user = JSON.parse(p.get('user')); } catch (e) { return null; }
+  if (!user || !Number.isSafeInteger(user.id)) return null;
+  return { user };
+}
+
 module.exports = {
-  DEFAULT_CHANNELS,
-  DEFAULT_RSS_FEEDS,
-  DEFAULT_X_HANDLES,
-  DEFAULT_TEMPLATE,
-  cleanChannelName,
-  cleanTargetChannel,
-  cleanXHandle,
-  stripLinksAndHandles,
-  toBoldLines,
-  newsHash,
-  applyTemplate,
-  formatCleanBilingualPost,
-  formatPriceAlert,
+  DEFAULT_CHANNELS, DEFAULT_RSS_FEEDS, DEFAULT_X_HANDLES, DEFAULT_TEMPLATE, DEFAULT_PROMO,
+  cleanChannelName, cleanTargetChannel, cleanXHandle, cleanFeedUrl,
+  stripLinksAndHandles, toBoldLines, newsHash, hasContent, truncate, isArabic, isPromo, parseDate,
+  applyTemplate, formatCleanBilingualPost, formatPriceAlert, verifyInitData,
 };
