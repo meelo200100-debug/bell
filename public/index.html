@@ -51,6 +51,12 @@ input:focus,select:focus,textarea:focus{border-color:var(--ac)}
 #banner{display:none;background:rgba(245,185,66,.12);border:1px solid rgba(245,185,66,.4);color:#ffd98a;border-radius:14px;padding:10px 12px;margin-bottom:12px;font-size:13px}
 #banner.bad{background:rgba(255,107,107,.12);border-color:rgba(255,107,107,.4);color:#ffb4b4}
 .mini{color:var(--mu);font-size:12px;margin-top:6px}
+.emoji-bar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:10px;padding:8px 10px;background:rgba(46,229,157,.08);border:1px solid var(--bd);border-radius:12px;color:var(--mu);font-size:12px}
+.emoji-bar b{color:var(--ac)}
+.button-config{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;margin-top:10px}
+.button-card{display:grid;gap:6px;padding:8px;background:rgba(0,0,0,.18);border:1px solid var(--bd);border-radius:12px}
+.button-card small{color:var(--ac);font-weight:700}
+@media(max-width:620px){.button-config{grid-template-columns:repeat(2,minmax(0,1fr))}}
 </style>
 </head>
 <body>
@@ -85,8 +91,20 @@ input:focus,select:focus,textarea:focus{border-color:var(--ac)}
     <div class="card">
       <h2>ماكيت / قالب النشر (ضع {{NEWS}} مكان الخبر)</h2>
       <textarea id="tplInput"></textarea>
-      <div class="mini">الإيموجي المميزة من تيليجرام: أضفها داخل القالب بهذا الشكل: <b dir="ltr">{{TG_EMOJI:1234567890123456789|⭐}}</b> — لاستخراج المعرّف: أرسل الإيموجي المميزة للبوت من حسابك، وسيعيد لك الكود جاهزاً. يمكنك تكرار الكود في أي مكان بالقالب.</div>
+      <div class="emoji-bar"><b>إيموجي مميزة</b><span>أرسل الإيموجي للبوت من حسابك، وسيعيد لك كودها جاهزًا للصق داخل القالب.</span></div>
       <button class="btn-on" id="btnSaveTpl" style="width:100%;margin-top:8px">💾 حفظ القالب</button>
+    </div>
+
+    <div class="card">
+      <h2>أزرار أسفل الخبر — 4 أزرار فقط</h2>
+      <div class="mini">ستظهر الأزرار الأربعة في صف واحد أسفل كل خبر وتنبيه سعر. اكتب نص الزر والرابط الذي يفتحه.</div>
+      <div class="button-config">
+        <div class="button-card"><small>الزر 1</small><input id="btnText1" maxlength="40" placeholder="القناة الرئيسية"><input id="btnUrl1" maxlength="2048" placeholder="https://t.me/main" dir="ltr"></div>
+        <div class="button-card"><small>الزر 2</small><input id="btnText2" maxlength="40" placeholder="Group التواصل"><input id="btnUrl2" maxlength="2048" placeholder="https://t.me/group" dir="ltr"></div>
+        <div class="button-card"><small>الزر 3</small><input id="btnText3" maxlength="40" placeholder="كلم الـ Admin"><input id="btnUrl3" maxlength="2048" placeholder="https://t.me/admin" dir="ltr"></div>
+        <div class="button-card"><small>الزر 4</small><input id="btnText4" maxlength="40" placeholder="مشاركة الخبر"><input id="btnUrl4" maxlength="2048" placeholder="https://t.me/share/url?..." dir="ltr"></div>
+      </div>
+      <button class="btn-on" id="btnSaveButtons" style="width:100%;margin-top:8px">💾 حفظ الأزرار</button>
     </div>
   </section>
 
@@ -148,6 +166,8 @@ const ERR = {
   invalid_target: 'معرّف القناة غير صالح.',
   empty_template: 'القالب فارغ.',
   template_too_long: 'القالب طويل جداً (الحد 3000 حرف).',
+  buttons_must_be_four: 'يجب إعداد أربعة أزرار بالضبط.',
+  invalid_button: 'نص أو رابط أحد الأزرار غير صالح.',
   server: 'خطأ في الخادم، حاول مرة أخرى.',
 };
 const errText = e => ERR[e && e.code] || 'تعذر الاتصال بالخادم.';
@@ -186,6 +206,11 @@ function render(s) {
   $('statusText').textContent = s.running ? 'يعمل تلقائياً' : 'متوقف';
   $('statusPill').classList.toggle('off', !s.running);
   if (document.activeElement !== $('tplInput')) $('tplInput').value = s.template || '';
+  (s.buttons || []).slice(0, 4).forEach((b, i) => {
+    const n = i + 1;
+    if (document.activeElement !== $('btnText' + n)) $('btnText' + n).value = b.text || '';
+    if (document.activeElement !== $('btnUrl' + n)) $('btnUrl' + n).value = b.url || '';
+  });
   $('cycleInfo').textContent = s.lastCycleAt ? 'آخر دورة: ' + new Date(s.lastCycleAt).toLocaleString('ar-EG') + (s.busy ? ' (جارية الآن)' : '') : 'لم تُنفَّذ دورة بعد';
   $('xInfo').textContent = s.xEnabled ? '' : 'مصادر X متوقفة حالياً: تحتاج استضافة Nitter (متغير NITTER_HOSTS).';
   banner(s.lastError ? 'آخر خطأ: ' + s.lastError : '', true);
@@ -229,6 +254,7 @@ async function act(fn, okMsg) {
 $('btnOn').onclick = () => act(() => api('/toggle', { running: true }), 'تم تشغيل البوت');
 $('btnOff').onclick = () => act(() => api('/toggle', { running: false }), 'تم إيقاف البوت');
 $('btnSaveTpl').onclick = () => act(() => api('/template', { template: $('tplInput').value }), 'تم حفظ القالب');
+$('btnSaveButtons').onclick = () => act(() => api('/buttons', { buttons: [1, 2, 3, 4].map(n => ({ text: $('btnText' + n).value, url: $('btnUrl' + n).value })) }), 'تم حفظ الأزرار الأربعة');
 $('btnAddSrc').onclick = () => act(async () => {
   const r = await api('/sources', { type: $('srcType').value, value: $('srcVal').value });
   $('srcVal').value = ''; return r;
